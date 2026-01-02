@@ -8,7 +8,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN, CONF_PDL
+from .const import DOMAIN
 
 class HelloWattConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for HelloWatt."""
@@ -22,7 +22,7 @@ class HelloWattConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            await self.async_set_unique_id(user_input[CONF_PDL])
+            await self.async_set_unique_id(user_input[CONF_USERNAME])
             self._abort_if_unique_id_configured()
             return self.async_create_entry(title="HelloWatt", data=user_input)
 
@@ -32,7 +32,6 @@ class HelloWattConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_USERNAME): str,
                     vol.Required(CONF_PASSWORD): str,
-                    vol.Required(CONF_PDL): str,
                 }
             ),
             errors=errors,
