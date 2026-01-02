@@ -1,0 +1,37 @@
+import_historical_data:
+  name: Import historical data
+  description: Import historical consumption data from HelloWatt into Home Assistant statistics. Data is imported month by month to avoid API overload.
+  fields:
+    start_date:
+      name: Start date
+      description: Start date for historical data import (YYYY-MM-DD). Data will be imported from the first day of this month.
+      required: true
+      example: "2023-01-01"
+      selector:
+        date:
+    end_date:
+      name: End date
+      description: End date for historical data import (YYYY-MM-DD). Defaults to today. Data will be imported up to the last day of this month.
+      required: false
+      example: "2024-12-31"
+      selector:
+        date:
+    pdl:
+      name: PDL
+      description: PDL number to import data for. Leave empty to import for all configured PDLs.
+      required: false
+      example: "12345678901234"
+      selector:
+        text:
+
+clear_statistics:
+  name: Clear statistics
+  description: Clear all HelloWatt statistics from Home Assistant database. Use this before re-importing data to avoid conflicts with old metadata.
+  fields:
+    pdl:
+      name: PDL
+      description: PDL number to clear statistics for. Leave empty to clear for all configured PDLs.
+      required: false
+      example: "12345678901234"
+      selector:
+        text:

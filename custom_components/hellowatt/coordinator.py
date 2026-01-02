@@ -67,6 +67,18 @@ class HelloWattCoordinator(DataUpdateCoordinator):
                 if "valueCo2" in latest_conso:
                     result["electricity_co2"] = latest_conso.get("valueCo2")
 
+                # Extract cost data if available
+                euros_detailed = latest_conso.get("eurosDetailed", {})
+                if euros_detailed:
+                    result["electricity_cost"] = sum(euros_detailed.values())
+                    # Separate subscription and consumption costs
+                    if "subscription" in euros_detailed:
+                        result["electricity_cost_subscription"] = euros_detailed.get("subscription", 0)
+                    # Calculate consumption cost (total - subscription)
+                    consumption_cost = sum(v for k, v in euros_detailed.items() if k != "subscription")
+                    if consumption_cost > 0:
+                        result["electricity_cost_consumption"] = consumption_cost
+
                 # Extract peak/off-peak hours only if they exist (HP/HC contracts)
                 # Don't add them for "base" contracts
                 if "HP" in kwh_detailed:
@@ -100,6 +112,18 @@ class HelloWattCoordinator(DataUpdateCoordinator):
                     # Extract CO2 emissions if available
                     if "valueCo2" in latest_gas:
                         result["gas_co2"] = latest_gas.get("valueCo2")
+
+                    # Extract cost data if available
+                    euros_detailed_gas = latest_gas.get("eurosDetailed", {})
+                    if euros_detailed_gas:
+                        result["gas_cost"] = sum(euros_detailed_gas.values())
+                        # Separate subscription and consumption costs
+                        if "subscription" in euros_detailed_gas:
+                            result["gas_cost_subscription"] = euros_detailed_gas.get("subscription", 0)
+                        # Calculate consumption cost (total - subscription)
+                        consumption_cost_gas = sum(v for k, v in euros_detailed_gas.items() if k != "subscription")
+                        if consumption_cost_gas > 0:
+                            result["gas_cost_consumption"] = consumption_cost_gas
 
                     # Day before latest (typically D-2)
                     if len(values_gas) >= 2:

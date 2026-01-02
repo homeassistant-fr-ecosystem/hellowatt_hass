@@ -112,8 +112,28 @@ class HelloWattApiClient:
                 await self.authenticate()
                 # Retry the request
                 async with self._session.get(url, params=params, headers=self._get_headers()) as retry_response:
+                    if retry_response.status != 200:
+                        response_text = await retry_response.text()
+                        from .const import LOGGER
+                        LOGGER.error(
+                            "API error on retry for %s: status=%s, response=%s",
+                            url,
+                            retry_response.status,
+                            response_text[:500]  # Limit to 500 chars
+                        )
                     retry_response.raise_for_status()
                     return await retry_response.json()
+
+            if response.status != 200:
+                response_text = await response.text()
+                from .const import LOGGER
+                LOGGER.error(
+                    "API error for %s: status=%s, params=%s, response=%s",
+                    url,
+                    response.status,
+                    params,
+                    response_text[:500]  # Limit to 500 chars
+                )
             response.raise_for_status()
             return await response.json()
 
@@ -131,8 +151,45 @@ class HelloWattApiClient:
                 await self.authenticate()
                 # Retry the request
                 async with self._session.get(url, params=params, headers=self._get_headers()) as retry_response:
+                    # 500 errors often indicate no gas contract, not a real error
+                    if retry_response.status == 500:
+                        from .const import LOGGER
+                        LOGGER.debug(
+                            "Gas data not available (status 500) - likely no gas contract for home %s",
+                            home_id
+                        )
+                        raise Exception("No gas contract available")
+                    if retry_response.status != 200:
+                        response_text = await retry_response.text()
+                        from .const import LOGGER
+                        LOGGER.error(
+                            "API error on retry for %s: status=%s, response=%s",
+                            url,
+                            retry_response.status,
+                            response_text[:500]  # Limit to 500 chars
+                        )
                     retry_response.raise_for_status()
                     return await retry_response.json()
+
+            # 500 errors often indicate no gas contract, not a real error
+            if response.status == 500:
+                from .const import LOGGER
+                LOGGER.debug(
+                    "Gas data not available (status 500) - likely no gas contract for home %s",
+                    home_id
+                )
+                raise Exception("No gas contract available")
+
+            if response.status != 200:
+                response_text = await response.text()
+                from .const import LOGGER
+                LOGGER.error(
+                    "API error for %s: status=%s, params=%s, response=%s",
+                    url,
+                    response.status,
+                    params,
+                    response_text[:500]  # Limit to 500 chars
+                )
             response.raise_for_status()
             return await response.json()
 

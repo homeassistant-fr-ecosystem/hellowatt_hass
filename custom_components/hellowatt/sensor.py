@@ -6,7 +6,7 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfEnergy, UnitOfTemperature, UnitOfMass
+from homeassistant.const import UnitOfEnergy, UnitOfTemperature, UnitOfMass, CURRENCY_EURO
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -79,20 +79,6 @@ SENSOR_TYPES = {
         "state_class": SensorStateClass.MEASUREMENT,
         "icon": None,
     },
-    "contract_provider": {
-        "name": "Contract Provider",
-        "device_class": None,
-        "unit": None,
-        "state_class": None,
-        "icon": "mdi:domain",
-    },
-    "contract_offer": {
-        "name": "Contract Offer",
-        "device_class": None,
-        "unit": None,
-        "state_class": None,
-        "icon": "mdi:file-document",
-    },
     "electricity_co2": {
         "name": "Electricity CO2 Emissions Daily",
         "device_class": SensorDeviceClass.WEIGHT,
@@ -106,6 +92,48 @@ SENSOR_TYPES = {
         "unit": UnitOfMass.KILOGRAMS,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "icon": "mdi:molecule-co2",
+    },
+    "electricity_cost": {
+        "name": "Electricity Cost Daily",
+        "device_class": SensorDeviceClass.MONETARY,
+        "unit": CURRENCY_EURO,
+        "state_class": SensorStateClass.TOTAL,
+        "icon": "mdi:currency-eur",
+    },
+    "electricity_cost_consumption": {
+        "name": "Electricity Cost Consumption Daily",
+        "device_class": SensorDeviceClass.MONETARY,
+        "unit": CURRENCY_EURO,
+        "state_class": SensorStateClass.TOTAL,
+        "icon": "mdi:cash",
+    },
+    "electricity_cost_subscription": {
+        "name": "Electricity Cost Subscription Daily",
+        "device_class": SensorDeviceClass.MONETARY,
+        "unit": CURRENCY_EURO,
+        "state_class": SensorStateClass.TOTAL,
+        "icon": "mdi:cash-clock",
+    },
+    "gas_cost": {
+        "name": "Gas Cost Daily",
+        "device_class": SensorDeviceClass.MONETARY,
+        "unit": CURRENCY_EURO,
+        "state_class": SensorStateClass.TOTAL,
+        "icon": "mdi:currency-eur",
+    },
+    "gas_cost_consumption": {
+        "name": "Gas Cost Consumption Daily",
+        "device_class": SensorDeviceClass.MONETARY,
+        "unit": CURRENCY_EURO,
+        "state_class": SensorStateClass.TOTAL,
+        "icon": "mdi:cash",
+    },
+    "gas_cost_subscription": {
+        "name": "Gas Cost Subscription Daily",
+        "device_class": SensorDeviceClass.MONETARY,
+        "unit": CURRENCY_EURO,
+        "state_class": SensorStateClass.TOTAL,
+        "icon": "mdi:cash-clock",
     },
 }
 
@@ -157,13 +185,23 @@ class HelloWattSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information about this entity."""
-        return DeviceInfo(
+        # Get contract information from coordinator data
+        contract_provider = self.coordinator.data.get("contract_provider")
+        contract_offer = self.coordinator.data.get("contract_offer")
+
+        device_info = DeviceInfo(
             identifiers={(DOMAIN, self._pdl)},
             name=f"HelloWatt {self._pdl}",
             manufacturer="HelloWatt",
             model="Energy Monitor",
             configuration_url="https://www.hellowatt.fr/mon-compte/",
         )
+
+        # Add contract information as device attributes if available
+        if contract_provider or contract_offer:
+            device_info["sw_version"] = f"{contract_provider or 'Unknown'} - {contract_offer or 'Unknown'}"
+
+        return device_info
 
     @property
     def native_value(self):
