@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .client import HelloWattApiClient
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN
 from .coordinator import HelloWattCoordinator
 from .importer import (
     SERVICE_CLEAR_SCHEMA,

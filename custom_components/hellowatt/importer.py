@@ -1,30 +1,30 @@
 """Import historical data for HelloWatt."""
+
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, time
+from datetime import datetime, time, timedelta
 import logging
 import traceback
 import zoneinfo
 
-import voluptuous as vol
 from dateutil.relativedelta import relativedelta
-
+from homeassistant.components.recorder import get_instance
+from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+from homeassistant.components.recorder.statistics import async_import_statistics
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import entity_registry as er
-from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.statistics import (
-    async_import_statistics,
-)
-from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+from homeassistant.helpers import config_validation as cv, entity_registry as er
+import voluptuous as vol
+
 try:
     from homeassistant.components.recorder.models import StatisticMeanType
 except ImportError:
+
     class StatisticMeanType:
         ARITHMETIC = "arithmetic"
+
 
 from .const import DOMAIN
 
@@ -158,16 +158,18 @@ async def _import_statistics(
             if subscription_cost > 0:
                 cumulative_sums[f"{energy_type}_cost_subscription"] += subscription_cost
                 statistics[f"{energy_type}_cost_subscription"].append(
-                   StatisticData(
+                    StatisticData(
                         start=dt,
                         end=endDt,
                         state=subscription_cost,
                         sum=cumulative_sums[f"{energy_type}_cost_subscription"],
-                   )
+                    )
                 )
 
             # Consumption cost (total - subscription)
-            consumption_cost = sum(v for k, v in euros_detailed.items() if k != "subscription")
+            consumption_cost = sum(
+                v for k, v in euros_detailed.items() if k != "subscription"
+            )
             if consumption_cost > 0:
                 cumulative_sums[f"{energy_type}_cost_consumption"] += consumption_cost
                 statistics[f"{energy_type}_cost_consumption"].append(
@@ -218,7 +220,9 @@ async def _import_statistics(
         entity_id = registry.async_get_entity_id(Platform.SENSOR, DOMAIN, unique_id)
 
         if not entity_id:
-            LOGGER.debug("Entity not found for unique_id %s, skipping import", unique_id)
+            LOGGER.debug(
+                "Entity not found for unique_id %s, skipping import", unique_id
+            )
             continue
 
         statistic_id = entity_id
@@ -288,7 +292,9 @@ async def _import_statistics(
     return sensors_imported
 
 
-async def async_import_historical_data(hass: HomeAssistant, entry: ConfigEntry, call: ServiceCall) -> None:
+async def async_import_historical_data(
+    hass: HomeAssistant, entry: ConfigEntry, call: ServiceCall
+) -> None:
     """Handle the import historical data service call."""
     start_date = call.data["start_date"]
     target_pdl = call.data.get("pdl")
@@ -305,7 +311,7 @@ async def async_import_historical_data(hass: HomeAssistant, entry: ConfigEntry, 
         LOGGER.info(
             "End date %s is too recent (data typically available up to D-2), automatically adjusted to %s",
             end_date,
-            max_available_date
+            max_available_date,
         )
         end_date = max_available_date
 
@@ -326,23 +332,15 @@ async def async_import_historical_data(hass: HomeAssistant, entry: ConfigEntry, 
     # Filter coordinators by PDL if specified
     if target_pdl:
         coordinators_to_process = {
-            pdl: coord
-            for pdl, coord in coordinators_dict.items()
-            if pdl == target_pdl
+            pdl: coord for pdl, coord in coordinators_dict.items() if pdl == target_pdl
         }
     else:
         coordinators_to_process = coordinators_dict
 
     for pdl, coordinator in coordinators_to_process.items():
         try:
-            # Find home_id for this PDL
-            home_id = next(
-                (h.get("id") for h in client.homes if h.get("enedisHome", {}).get("pdl") == pdl),
-                None
-            )
-            if not home_id:
-                LOGGER.error("Could not find home_id for PDL %s", pdl)
-                continue
+            # Get home_id from coordinator
+            home_id = coordinator.home_id
 
             LOGGER.info("Fetching historical data for PDL %s", pdl)
 
@@ -356,15 +354,19 @@ async def async_import_historical_data(hass: HomeAssistant, entry: ConfigEntry, 
             while current_start <= end_date:
                 # Calculate end of current month
                 month_end = min(
-                    datetime(current_start.year, current_start.month, 1).date() + relativedelta(months=1) - relativedelta(days=1),
-                    end_date
+                    datetime(current_start.year, current_start.month, 1).date()
+                    + relativedelta(months=1)
+                    - relativedelta(days=1),
+                    end_date,
                 )
 
                 # Convert to datetime for API call with timezone
                 # Use 23:59:59 instead of datetime.max.time() to avoid microseconds
                 # Use Europe/Paris timezone for French energy data
                 tz = zoneinfo.ZoneInfo("Europe/Paris")
-                start_datetime = datetime.combine(current_start, time(0, 0, 0), tzinfo=tz)
+                start_datetime = datetime.combine(
+                    current_start, time(0, 0, 0), tzinfo=tz
+                )
                 end_datetime = datetime.combine(month_end, time(23, 59, 59), tzinfo=tz)
 
                 elec_sensors = 0
@@ -381,13 +383,13 @@ async def async_import_historical_data(hass: HomeAssistant, entry: ConfigEntry, 
                         LOGGER.debug(
                             "Received %d days of electricity data for %s",
                             len(electricity_data["values"]),
-                            current_start.strftime("%Y-%m")
+                            current_start.strftime("%Y-%m"),
                         )
                     else:
                         LOGGER.warning(
                             "No electricity data received for %s (PDL %s)",
                             current_start.strftime("%Y-%m"),
-                            pdl
+                            pdl,
                         )
 
                     # Import electricity statistics
@@ -403,11 +405,11 @@ async def async_import_historical_data(hass: HomeAssistant, entry: ConfigEntry, 
                         "Error importing electricity data for %s (PDL %s): %s",
                         current_start.strftime("%Y-%m"),
                         pdl,
-                        elec_err
+                        elec_err,
                     )
                     LOGGER.debug(
                         "Full traceback for electricity import error: %s",
-                        traceback.format_exc()
+                        traceback.format_exc(),
                     )
 
                 try:
@@ -432,15 +434,16 @@ async def async_import_historical_data(hass: HomeAssistant, entry: ConfigEntry, 
                         "Skipping gas data import for %s (PDL %s): %s",
                         current_start.strftime("%Y-%m"),
                         pdl,
-                        str(gas_err)
+                        str(gas_err),
                     )
 
                 total_months += 1
 
                 # Calculate progress percentage
                 total_months_to_import = (
-                    (end_date.year - start_date.year) * 12 +
-                    (end_date.month - start_date.month) + 1
+                    (end_date.year - start_date.year) * 12
+                    + (end_date.month - start_date.month)
+                    + 1
                 )
                 progress_pct = int((total_months / total_months_to_import) * 100)
 
@@ -459,19 +462,24 @@ async def async_import_historical_data(hass: HomeAssistant, entry: ConfigEntry, 
                 await asyncio.sleep(0.5)
 
                 # Move to next month
-                current_start = (datetime(current_start.year, current_start.month, 1) + relativedelta(months=1)).date()
+                current_start = (
+                    datetime(current_start.year, current_start.month, 1)
+                    + relativedelta(months=1)
+                ).date()
 
             LOGGER.info(
                 "Completed: Successfully imported %d months of historical data for PDL %s",
                 total_months,
-                pdl
+                pdl,
             )
 
         except Exception as err:
             LOGGER.error("Error importing data for PDL %s: %s", pdl, err)
 
 
-async def async_clear_statistics(hass: HomeAssistant, entry: ConfigEntry, call: ServiceCall) -> None:
+async def async_clear_statistics(
+    hass: HomeAssistant, entry: ConfigEntry, call: ServiceCall
+) -> None:
     """Handle the clear statistics service call.
 
     This clears both the statistics data AND metadata to remove old invalid entries.
@@ -484,9 +492,7 @@ async def async_clear_statistics(hass: HomeAssistant, entry: ConfigEntry, call: 
     # Filter coordinators by PDL if specified
     if target_pdl:
         coordinators_to_process = {
-            pdl: coord
-            for pdl, coord in coordinators_dict.items()
-            if pdl == target_pdl
+            pdl: coord for pdl, coord in coordinators_dict.items() if pdl == target_pdl
         }
     else:
         coordinators_to_process = coordinators_dict
@@ -495,26 +501,38 @@ async def async_clear_statistics(hass: HomeAssistant, entry: ConfigEntry, call: 
     pdls_to_clear = list(coordinators_to_process.keys())
 
     LOGGER.info(
-        "Clearing all HelloWatt statistics for PDL(s): %s",
-        ", ".join(pdls_to_clear)
+        "Clearing all HelloWatt statistics for PDL(s): %s", ", ".join(pdls_to_clear)
     )
 
     # Clear statistics data and metadata using recorder session
     def _clear_statistics_with_metadata():
         """Clear statistics and metadata in a recorder session."""
         from homeassistant.components.recorder.util import session_scope
-        from sqlalchemy import delete
+        from sqlalchemy import delete, or_
+
         try:
-            from homeassistant.components.recorder.db_schema import StatisticsMeta, Statistics, StatisticsShortTerm
+            from homeassistant.components.recorder.db_schema import (
+                Statistics,
+                StatisticsMeta,
+                StatisticsShortTerm,
+            )
         except ImportError:
-            from homeassistant.components.recorder.models import StatisticsMeta, Statistics, StatisticsShortTerm
+            from homeassistant.components.recorder.models import (
+                Statistics,
+                StatisticsMeta,
+                StatisticsShortTerm,
+            )
 
         with session_scope(hass=hass, read_only=False) as session:
-            # Find ALL statistics metadata that starts with hellowatt: and contains any of our PDLs
-            # This catches both current format and any old/malformed entries
-            all_metadata = session.query(StatisticsMeta).filter(
-                StatisticsMeta.source == DOMAIN
-            ).all()
+            # Find ALL statistics metadata that contains any of our PDLs
+            # We filter by statistic_id containing the PDL because source is usually 'recorder'
+            filters = [
+                StatisticsMeta.statistic_id.like(f"%{pdl}%") for pdl in pdls_to_clear
+            ]
+            if not filters:
+                return 0
+
+            all_metadata = session.query(StatisticsMeta).filter(or_(*filters)).all()
 
             metadata_ids_to_delete = []
             stats_found = []
@@ -533,21 +551,27 @@ async def async_clear_statistics(hass: HomeAssistant, entry: ConfigEntry, call: 
                 LOGGER.info(
                     "Found %d metadata entries to delete: %s",
                     len(metadata_ids_to_delete),
-                    ", ".join(stats_found)
+                    ", ".join(stats_found),
                 )
 
                 # Delete statistics data first (both long-term and short-term)
                 deleted_stats = session.execute(
-                    delete(Statistics).where(Statistics.metadata_id.in_(metadata_ids_to_delete))
+                    delete(Statistics).where(
+                        Statistics.metadata_id.in_(metadata_ids_to_delete)
+                    )
                 ).rowcount
 
                 deleted_short = session.execute(
-                    delete(StatisticsShortTerm).where(StatisticsShortTerm.metadata_id.in_(metadata_ids_to_delete))
+                    delete(StatisticsShortTerm).where(
+                        StatisticsShortTerm.metadata_id.in_(metadata_ids_to_delete)
+                    )
                 ).rowcount
 
                 # Then delete metadata
                 deleted_meta = session.execute(
-                    delete(StatisticsMeta).where(StatisticsMeta.id.in_(metadata_ids_to_delete))
+                    delete(StatisticsMeta).where(
+                        StatisticsMeta.id.in_(metadata_ids_to_delete)
+                    )
                 ).rowcount
 
                 session.commit()
@@ -556,16 +580,21 @@ async def async_clear_statistics(hass: HomeAssistant, entry: ConfigEntry, call: 
                     "Deleted %d metadata entries, %d long-term statistics, and %d short-term statistics",
                     deleted_meta,
                     deleted_stats,
-                    deleted_short
+                    deleted_short,
                 )
                 return deleted_meta
-            else:
-                LOGGER.info("No metadata entries found to delete")
-                return 0
 
-    deleted_count = await get_instance(hass).async_add_executor_job(_clear_statistics_with_metadata)
+            LOGGER.info("No metadata entries found to delete")
+            return 0
+
+    deleted_count = await get_instance(hass).async_add_executor_job(
+        _clear_statistics_with_metadata
+    )
 
     if deleted_count > 0:
-        LOGGER.info("Successfully cleared all statistics and metadata. Please restart Home Assistant before importing new data.")
-    else:
-        LOGGER.info("No statistics found to clear")
+        LOGGER.info(
+            "Successfully cleared all statistics and metadata. Please restart Home Assistant before importing new data."
+        )
+        return
+
+    LOGGER.info("No statistics found to clear")

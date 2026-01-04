@@ -10,12 +10,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CURRENCY_EURO,
-    UnitOfEnergy,
-    UnitOfMass,
-    UnitOfTemperature,
-)
+from homeassistant.const import UnitOfEnergy, UnitOfMass, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -51,14 +46,14 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "name": "Electricity Day Before",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:calendar-minus",
     },
     "electricity_weekly": {
         "name": "Electricity Weekly",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:calendar-week",
     },
     "gas": {
@@ -72,14 +67,14 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "name": "Gas Day Before",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:fire-circle",
     },
     "gas_weekly": {
         "name": "Gas Weekly",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:fire-alert",
     },
     "temperature": {
@@ -106,42 +101,42 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
     "electricity_cost": {
         "name": "Electricity Cost Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:currency-eur",
     },
     "electricity_cost_consumption": {
         "name": "Electricity Cost Consumption Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:cash",
     },
     "electricity_cost_subscription": {
         "name": "Electricity Cost Subscription Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:cash-clock",
     },
     "gas_cost": {
         "name": "Gas Cost Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:currency-eur",
     },
     "gas_cost_consumption": {
         "name": "Gas Cost Consumption Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:cash",
     },
     "gas_cost_subscription": {
         "name": "Gas Cost Subscription Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:cash-clock",
     },

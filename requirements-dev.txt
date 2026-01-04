@@ -17,6 +17,7 @@ types-setuptools>=69.0.0
 
 # Home Assistant (for development/testing)
 homeassistant>=2024.1.0
+psutil-home-assistant
 
 # Additional useful tools
 pre-commit>=3.6.0
