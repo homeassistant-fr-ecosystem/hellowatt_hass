@@ -1,17 +1,22 @@
 """API Client for HelloWatt."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
+from typing import Any, TypeVar
 import aiohttp
 
-from .const import API_URL
+from .const import API_URL, LOGGER
 
-HEADERS = {
+HEADERS: dict[str, str] = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
     "Accept": "application/json; version=1.48",
     "X-Requested-With": "XMLHttpRequest",
     "Referer": "https://www.hellowatt.fr/mon-compte/",
 }
+
+# Type variable for generic return types
+T = TypeVar("T")
 
 class HelloWattApiClient:
     """HelloWatt API Client."""
@@ -19,20 +24,30 @@ class HelloWattApiClient:
     def __init__(
         self, session: aiohttp.ClientSession, username: str, password: str
     ) -> None:
-        """Initialize the API client."""
-        self._session = session
-        self._username = username
-        self._password = password
-        self._homes = []
-        self._authenticating = False
+        """Initialize the API client.
+
+        Args:
+            session: aiohttp ClientSession with cookie jar enabled
+            username: HelloWatt account username/email
+            password: HelloWatt account password
+        """
+        self._session: aiohttp.ClientSession = session
+        self._username: str = username
+        self._password: str = password
+        self._homes: list[dict[str, Any]] = []
+        self._authenticating: bool = False
 
     @property
-    def homes(self) -> list[dict]:
-        """Return the homes."""
+    def homes(self) -> list[dict[str, Any]]:
+        """Return the list of homes/PDLs associated with the account."""
         return self._homes
 
-    def _get_headers(self) -> dict:
-        """Get headers."""
+    def _get_headers(self) -> dict[str, str]:
+        """Get HTTP headers with CSRF token if available.
+
+        Returns:
+            Dictionary of HTTP headers including CSRF token from cookies
+        """
         headers = HEADERS.copy()
         for cookie in self._session.cookie_jar:
             if cookie.key == "csrftoken":
@@ -40,26 +55,126 @@ class HelloWattApiClient:
                 break
         return headers
 
+    async def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        handle_500_as_no_data: bool = False,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Make HTTP request with automatic retry on 403 (authentication failure).
+
+        This method centralizes the retry logic that was previously duplicated
+        across all API methods. It automatically re-authenticates and retries
+        once if a 403 status is received.
+
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            url: Full URL to request
+            handle_500_as_no_data: If True, treat 500 errors as missing data
+                (used for gas endpoints when no contract exists)
+            **kwargs: Additional arguments to pass to the request
+
+        Returns:
+            JSON response as dictionary
+
+        Raises:
+            Exception: If request fails after retry or for non-retryable errors
+        """
+        # Ensure headers are included
+        if "headers" not in kwargs:
+            kwargs["headers"] = self._get_headers()
+
+        async with self._session.request(method, url, **kwargs) as response:
+            # Handle authentication failure - retry once after re-authenticating
+            if response.status == 403:
+                LOGGER.debug("Received 403, attempting re-authentication")
+                await self.authenticate()
+
+                # Refresh headers after authentication
+                kwargs["headers"] = self._get_headers()
+
+                # Retry the request
+                async with self._session.request(method, url, **kwargs) as retry_response:
+                    return await self._handle_response(
+                        retry_response, url, handle_500_as_no_data
+                    )
+
+            return await self._handle_response(response, url, handle_500_as_no_data)
+
+    async def _handle_response(
+        self,
+        response: aiohttp.ClientResponse,
+        url: str,
+        handle_500_as_no_data: bool = False,
+    ) -> dict[str, Any]:
+        """Handle HTTP response with appropriate error logging.
+
+        Args:
+            response: aiohttp ClientResponse object
+            url: URL that was requested (for logging)
+            handle_500_as_no_data: If True, treat 500 errors as missing data
+
+        Returns:
+            JSON response as dictionary
+
+        Raises:
+            Exception: For HTTP errors or invalid responses
+        """
+        # Special handling for 500 errors on gas endpoint (no contract)
+        if response.status == 500 and handle_500_as_no_data:
+            LOGGER.debug(
+                "Gas data not available (status 500) - likely no gas contract for URL %s",
+                url
+            )
+            raise Exception("No gas contract available")
+
+        # Log non-200 responses with truncated response text
+        if response.status != 200:
+            response_text = await response.text()
+            LOGGER.error(
+                "API error for %s: status=%s, response=%s",
+                url,
+                response.status,
+                response_text[:500]  # Limit to 500 chars
+            )
+
+        response.raise_for_status()
+        return await response.json()
+
     async def authenticate(self) -> None:
-        """Authenticate."""
+        """Authenticate with HelloWatt API and fetch homes.
+
+        This method performs a multi-step authentication process:
+        1. Gets CSRF token from login page
+        2. Posts credentials with CSRF token
+        3. Validates session cookie was received
+        4. Fetches list of homes/PDLs
+
+        Raises:
+            Exception: If authentication fails or no session cookie received
+        """
         if self._authenticating:
             # Prevent recursive authentication attempts
+            LOGGER.debug("Authentication already in progress, skipping")
             return
 
         self._authenticating = True
         try:
             login_url = "https://www.hellowatt.fr/accounts/login/"
 
-            # 1. Get login page to get CSRF cookie
+            # 1. Get login page to obtain CSRF cookie
             async with self._session.get(login_url) as response:
                 response.raise_for_status()
 
+            # Extract CSRF token from cookie jar
             csrftoken = ""
             for cookie in self._session.cookie_jar:
                 if cookie.key == "csrftoken":
                     csrftoken = cookie.value
                     break
 
+            # 2. Post login credentials with CSRF token
             data = {
                 "login": self._username,
                 "password": self._password,
@@ -74,10 +189,12 @@ class HelloWattApiClient:
             async with self._session.post(login_url, data=data, headers=headers) as response:
                 response.raise_for_status()
 
+                # Parse JSON response for error messages
+                resp_json: dict[str, Any] | None = None
                 try:
                     resp_json = await response.json()
                 except Exception:
-                    resp_json = None
+                    pass
 
                 if resp_json:
                     form = resp_json.get("form", {})
@@ -85,159 +202,121 @@ class HelloWattApiClient:
                         raise Exception(f"Authentication failed: {form['errors']}")
                     for field_name, field_data in form.get("fields", {}).items():
                         if field_data.get("errors"):
-                            raise Exception(f"Authentication failed ({field_name}): {field_data['errors']}")
+                            raise Exception(
+                                f"Authentication failed ({field_name}): {field_data['errors']}"
+                            )
 
+                # Verify session cookie was set
                 if not any(cookie.key == "sessionid" for cookie in self._session.cookie_jar):
                     raise Exception("Authentication failed: No session cookie received")
 
-            # Fetch homes after successful authentication - bypass retry logic
+            # 3. Fetch homes after successful authentication
+            # Note: Direct request to avoid retry logic during authentication
             url = f"{API_URL}/homes"
             async with self._session.get(url, headers=self._get_headers()) as response:
                 response.raise_for_status()
                 self._homes = await response.json()
+
+            LOGGER.debug("Authentication successful, found %d home(s)", len(self._homes))
         finally:
             self._authenticating = False
 
-    async def get_daily_consumption(self, home_id: str, start_date: datetime, end_date: datetime) -> dict:
-        """Get daily electricity consumption."""
+    async def get_daily_consumption(
+        self, home_id: str, start_date: datetime, end_date: datetime
+    ) -> dict[str, Any]:
+        """Get daily electricity consumption data.
+
+        Args:
+            home_id: Home identifier from HelloWatt API
+            start_date: Start date for consumption data (timezone-aware)
+            end_date: End date for consumption data (timezone-aware)
+
+        Returns:
+            Dictionary containing daily consumption values with structure:
+            {
+                "values": [
+                    {
+                        "datetime": "2024-01-01T00:00:00Z",
+                        "kwhDetailed": {"HP": 10.5, "HC": 5.2},
+                        "eurosDetailed": {"consumption": 2.5, "subscription": 0.5},
+                        "valueCo2": 1.2
+                    },
+                    ...
+                ]
+            }
+        """
         url = f"{API_URL}/homes/{home_id}/sge_measures/conso_daily"
         params = {
             "startDate": start_date.isoformat(),
             "endDate": end_date.isoformat(),
         }
 
-        async with self._session.get(url, params=params, headers=self._get_headers()) as response:
-            if response.status == 403:
-                # Session might have expired, try to re-authenticate
-                await self.authenticate()
-                # Retry the request
-                async with self._session.get(url, params=params, headers=self._get_headers()) as retry_response:
-                    if retry_response.status != 200:
-                        response_text = await retry_response.text()
-                        from .const import LOGGER
-                        LOGGER.error(
-                            "API error on retry for %s: status=%s, response=%s",
-                            url,
-                            retry_response.status,
-                            response_text[:500]  # Limit to 500 chars
-                        )
-                    retry_response.raise_for_status()
-                    return await retry_response.json()
+        return await self._request_with_retry("GET", url, params=params)
 
-            if response.status != 200:
-                response_text = await response.text()
-                from .const import LOGGER
-                LOGGER.error(
-                    "API error for %s: status=%s, params=%s, response=%s",
-                    url,
-                    response.status,
-                    params,
-                    response_text[:500]  # Limit to 500 chars
-                )
-            response.raise_for_status()
-            return await response.json()
+    async def get_daily_gas_consumption(
+        self, home_id: str, start_date: datetime, end_date: datetime
+    ) -> dict[str, Any]:
+        """Get daily gas consumption data.
 
-    async def get_daily_gas_consumption(self, home_id: str, start_date: datetime, end_date: datetime) -> dict:
-        """Get daily gas consumption."""
+        Args:
+            home_id: Home identifier from HelloWatt API
+            start_date: Start date for consumption data (timezone-aware)
+            end_date: End date for consumption data (timezone-aware)
+
+        Returns:
+            Dictionary containing daily gas consumption values
+
+        Raises:
+            Exception: If no gas contract exists (500 error) or other API errors
+        """
         url = f"{API_URL}/homes/{home_id}/adict_measures/conso_daily"
         params = {
             "startDate": start_date.isoformat(),
             "endDate": end_date.isoformat(),
         }
 
-        async with self._session.get(url, params=params, headers=self._get_headers()) as response:
-            if response.status == 403:
-                # Session might have expired, try to re-authenticate
-                await self.authenticate()
-                # Retry the request
-                async with self._session.get(url, params=params, headers=self._get_headers()) as retry_response:
-                    # 500 errors often indicate no gas contract, not a real error
-                    if retry_response.status == 500:
-                        from .const import LOGGER
-                        LOGGER.debug(
-                            "Gas data not available (status 500) - likely no gas contract for home %s",
-                            home_id
-                        )
-                        raise Exception("No gas contract available")
-                    if retry_response.status != 200:
-                        response_text = await retry_response.text()
-                        from .const import LOGGER
-                        LOGGER.error(
-                            "API error on retry for %s: status=%s, response=%s",
-                            url,
-                            retry_response.status,
-                            response_text[:500]  # Limit to 500 chars
-                        )
-                    retry_response.raise_for_status()
-                    return await retry_response.json()
+        return await self._request_with_retry(
+            "GET", url, params=params, handle_500_as_no_data=True
+        )
 
-            # 500 errors often indicate no gas contract, not a real error
-            if response.status == 500:
-                from .const import LOGGER
-                LOGGER.debug(
-                    "Gas data not available (status 500) - likely no gas contract for home %s",
-                    home_id
-                )
-                raise Exception("No gas contract available")
+    async def get_yearly_temperature(
+        self, home_id: str, start_date: datetime, end_date: datetime
+    ) -> dict[str, Any]:
+        """Get yearly temperature data.
 
-            if response.status != 200:
-                response_text = await response.text()
-                from .const import LOGGER
-                LOGGER.error(
-                    "API error for %s: status=%s, params=%s, response=%s",
-                    url,
-                    response.status,
-                    params,
-                    response_text[:500]  # Limit to 500 chars
-                )
-            response.raise_for_status()
-            return await response.json()
+        Args:
+            home_id: Home identifier from HelloWatt API
+            start_date: Start date for temperature data (timezone-aware)
+            end_date: End date for temperature data (timezone-aware)
 
-    async def get_yearly_temperature(self, home_id: str, start_date: datetime, end_date: datetime) -> dict:
-        """Get yearly temperature."""
+        Returns:
+            Dictionary containing monthly temperature values
+        """
         url = f"{API_URL}/homes/{home_id}/temperature_measures/yearly"
         params = {
             "startDate": start_date.isoformat(),
             "endDate": end_date.isoformat(),
         }
 
-        async with self._session.get(url, params=params, headers=self._get_headers()) as response:
-            if response.status == 403:
-                # Session might have expired, try to re-authenticate
-                await self.authenticate()
-                # Retry the request
-                async with self._session.get(url, params=params, headers=self._get_headers()) as retry_response:
-                    retry_response.raise_for_status()
-                    return await retry_response.json()
-            response.raise_for_status()
-            return await response.json()
+        return await self._request_with_retry("GET", url, params=params)
 
-    async def get_contracts(self, home_id: str) -> list[dict]:
-        """Get contracts."""
+    async def get_contracts(self, home_id: str) -> list[dict[str, Any]]:
+        """Get energy contracts for a home.
+
+        Args:
+            home_id: Home identifier from HelloWatt API
+
+        Returns:
+            List of contracts with provider and offer information
+        """
         url = f"{API_URL}/homes/{home_id}/contracts"
+        return await self._request_with_retry("GET", url)
 
-        async with self._session.get(url, headers=self._get_headers()) as response:
-            if response.status == 403:
-                # Session might have expired, try to re-authenticate
-                await self.authenticate()
-                # Retry the request
-                async with self._session.get(url, headers=self._get_headers()) as retry_response:
-                    retry_response.raise_for_status()
-                    return await retry_response.json()
-            response.raise_for_status()
-            return await response.json()
+    async def get_homes(self) -> list[dict[str, Any]]:
+        """Get list of homes/PDLs associated with the account.
 
-    async def get_homes(self) -> list[dict]:
-        """Get homes."""
+        Returns:
+            List of homes with address and PDL information
+        """
         url = f"{API_URL}/homes"
-
-        async with self._session.get(url, headers=self._get_headers()) as response:
-            if response.status == 403:
-                # Session might have expired, try to re-authenticate
-                await self.authenticate()
-                # Retry the request
-                async with self._session.get(url, headers=self._get_headers()) as retry_response:
-                    retry_response.raise_for_status()
-                    return await retry_response.json()
-            response.raise_for_status()
-            return await response.json()
+        return await self._request_with_retry("GET", url)

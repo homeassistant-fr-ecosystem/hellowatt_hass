@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
@@ -13,24 +14,55 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN, LOGGER
 from .client import HelloWattApiClient
 
-class HelloWattCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching HelloWatt data."""
+class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Class to manage fetching HelloWatt data.
 
-    def __init__(self, hass: HomeAssistant, client: HelloWattApiClient, pdl: str, home_id: str, home: dict) -> None:
-        """Initialize."""
+    Coordinates data updates for a single home/PDL, fetching electricity,
+    gas, temperature, and contract information from the HelloWatt API.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: HelloWattApiClient,
+        pdl: str,
+        home_id: str,
+        home: dict[str, Any],
+    ) -> None:
+        """Initialize the coordinator.
+
+        Args:
+            hass: Home Assistant instance
+            client: Authenticated HelloWatt API client
+            pdl: Point de Livraison (delivery point) identifier
+            home_id: Home identifier from HelloWatt API
+            home: Home data dictionary containing address and area info
+        """
         super().__init__(
             hass,
             LOGGER,
             name=f"{DOMAIN}_{pdl}",
             update_interval=timedelta(hours=1),
         )
-        self.client = client
-        self.pdl = pdl
-        self.home_id = home_id
-        self.home = home
+        self.client: HelloWattApiClient = client
+        self.pdl: str = pdl
+        self.home_id: str = home_id
+        self.home: dict[str, Any] = home
 
-    async def _async_update_data(self):
-        """Fetch data from HelloWatt API."""
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch data from HelloWatt API.
+
+        Fetches the last 7 days of data to ensure we have the latest available
+        values. Due to energy provider delays, the most recent data is typically
+        from yesterday (D-1).
+
+        Returns:
+            Dictionary containing all sensor data including electricity, gas,
+            temperature, contract info, and address details
+
+        Raises:
+            UpdateFailed: If API communication fails
+        """
         try:
             # Fetch last 7 days to ensure we have data
             end_date = dt_util.now()

@@ -4,6 +4,7 @@ from __future__ import annotations
 import aiohttp
 import asyncio
 from datetime import datetime
+from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
@@ -48,11 +49,24 @@ async def _import_statistics(
     hass: HomeAssistant,
     pdl: str,
     energy_type: str,
-    data: dict,
+    data: dict[str, Any],
 ) -> int:
     """Import statistics data into Home Assistant.
 
-    Returns the number of sensor types imported.
+    Processes consumption data from the API and imports it into Home Assistant's
+    statistics database for long-term storage and energy dashboard integration.
+
+    Args:
+        hass: Home Assistant instance
+        pdl: Point de Livraison identifier
+        energy_type: Type of energy ('electricity' or 'gas')
+        data: API response containing consumption values and metadata
+
+    Returns:
+        Number of sensor types successfully imported
+
+    Raises:
+        Exception: If statistics import fails (logged but not propagated)
     """
     if not data or "values" not in data:
         return 0

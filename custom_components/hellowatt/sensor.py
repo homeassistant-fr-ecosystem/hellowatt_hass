@@ -1,11 +1,14 @@
 """Sensor platform for HelloWatt."""
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorDeviceClass,
     SensorStateClass,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy, UnitOfTemperature, UnitOfMass, CURRENCY_EURO
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -13,9 +16,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
+from .coordinator import HelloWattCoordinator
 
-# Define sensor configurations
-SENSOR_TYPES = {
+# Define sensor configurations with metadata
+SENSOR_TYPES: dict[str, dict[str, Any]] = {
     "electricity": {
         "name": "Electricity Daily",
         "device_class": SensorDeviceClass.ENERGY,
@@ -139,13 +143,24 @@ SENSOR_TYPES = {
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the HelloWatt sensor."""
-    coordinators = hass.data[DOMAIN][entry.entry_id]["coordinators"]
+    """Set up the HelloWatt sensor platform.
 
-    entities = []
+    Creates sensor entities for all configured PDLs and all sensor types
+    (electricity, gas, temperature, costs, CO2).
+
+    Args:
+        hass: Home Assistant instance
+        entry: Config entry for this integration
+        async_add_entities: Callback to add entities to Home Assistant
+    """
+    coordinators: dict[str, HelloWattCoordinator] = hass.data[DOMAIN][entry.entry_id][
+        "coordinators"
+    ]
+
+    entities: list[HelloWattSensor] = []
 
     # Create sensors for each PDL
     for pdl, coordinator in coordinators.items():
@@ -167,27 +182,56 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class HelloWattSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a HelloWatt Sensor."""
+class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
+    """Representation of a HelloWatt Sensor.
 
-    def __init__(self, coordinator, pdl, key_id, name, device_class, unit, state_class, icon):
-        """Initialize the sensor."""
+    Each sensor represents a specific data point (electricity, gas, cost, etc.)
+    for a particular PDL (Point de Livraison).
+    """
+
+    def __init__(
+        self,
+        coordinator: HelloWattCoordinator,
+        pdl: str,
+        key_id: str,
+        name: str,
+        device_class: SensorDeviceClass | None,
+        unit: str | None,
+        state_class: SensorStateClass | None,
+        icon: str | None,
+    ) -> None:
+        """Initialize the sensor.
+
+        Args:
+            coordinator: Data coordinator for this PDL
+            pdl: Point de Livraison identifier
+            key_id: Sensor key in coordinator data (e.g., 'electricity', 'gas')
+            name: Human-readable sensor name
+            device_class: Home Assistant device class
+            unit: Unit of measurement
+            state_class: State class for statistics
+            icon: MDI icon identifier
+        """
         super().__init__(coordinator)
-        self._pdl = pdl
-        self._key_id = key_id
-        self._attr_name = f"{name}"
-        self._attr_unique_id = f"{DOMAIN}_{pdl}_{key_id}"
-        self._attr_device_class = device_class
-        self._attr_state_class = state_class
-        self._attr_native_unit_of_measurement = unit
-        self._attr_icon = icon
+        self._pdl: str = pdl
+        self._key_id: str = key_id
+        self._attr_name: str = name
+        self._attr_unique_id: str = f"{DOMAIN}_{pdl}_{key_id}"
+        self._attr_device_class: SensorDeviceClass | None = device_class
+        self._attr_state_class: SensorStateClass | None = state_class
+        self._attr_native_unit_of_measurement: str | None = unit
+        self._attr_icon: str | None = icon
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device information about this entity."""
+        """Return device information about this entity.
+
+        Groups all sensors for a PDL under a single device, including
+        contract information if available.
+        """
         # Get contract information from coordinator data
-        contract_provider = self.coordinator.data.get("contract_provider")
-        contract_offer = self.coordinator.data.get("contract_offer")
+        contract_provider: str | None = self.coordinator.data.get("contract_provider")
+        contract_offer: str | None = self.coordinator.data.get("contract_offer")
 
         device_info = DeviceInfo(
             identifiers={(DOMAIN, self._pdl)},
@@ -197,21 +241,35 @@ class HelloWattSensor(CoordinatorEntity, SensorEntity):
             configuration_url="https://www.hellowatt.fr/mon-compte/",
         )
 
-        # Add contract information as device attributes if available
+        # Add contract information as software version if available
         if contract_provider or contract_offer:
-            device_info["sw_version"] = f"{contract_provider or 'Unknown'} - {contract_offer or 'Unknown'}"
+            device_info["sw_version"] = (
+                f"{contract_provider or 'Unknown'} - {contract_offer or 'Unknown'}"
+            )
 
         return device_info
 
     @property
-    def native_value(self):
-        """Return the state of the sensor."""
+    def native_value(self) -> float | int | str | None:
+        """Return the current state of the sensor.
+
+        Returns:
+            Sensor value from coordinator data, or None if not available
+        """
         return self.coordinator.data.get(self._key_id)
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
-        # Entity is available if coordinator has data and the specific sensor value exists
+        """Return if entity is available.
+
+        Entity is available only if:
+        - Coordinator is available (connected to API)
+        - Coordinator has data
+        - The specific sensor key exists in coordinator data
+
+        Returns:
+            True if entity is available, False otherwise
+        """
         return (
             super().available
             and self.coordinator.data is not None
