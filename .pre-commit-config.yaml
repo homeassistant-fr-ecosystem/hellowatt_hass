@@ -6,7 +6,7 @@
 repos:
   # Ruff - Fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.14
+    rev: v0.8.4
     hooks:
       # Run the linter
       - id: ruff
@@ -36,7 +36,9 @@ repos:
         additional_dependencies:
           - types-aiofiles
           - types-setuptools
-        args: [--ignore-missing-imports, --show-error-codes]
+          - types-python-dateutil
+        args: [--ignore-missing-imports, --show-error-codes, --namespace-packages]
+        files: ^custom_components/hellowatt/
 
   # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks

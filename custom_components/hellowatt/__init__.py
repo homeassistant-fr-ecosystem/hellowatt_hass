@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import zoneinfo
 from datetime import datetime, time
 from typing import Any
+import zoneinfo
 
 import aiohttp
-import voluptuous as vol
-from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.statistics import async_import_statistics
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+import voluptuous as vol
 
 from .client import HelloWattApiClient
 from .const import DATA_AVAILABILITY_OFFSET_DAYS, DOMAIN, LOGGER
@@ -64,6 +62,8 @@ async def _import_statistics(
     Raises:
         Exception: If statistics import fails (logged but not propagated)
     """
+    from homeassistant.components.recorder.statistics import async_import_statistics
+
     if not data or "values" not in data:
         return 0
 
@@ -479,6 +479,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         LOGGER.info(
             "Clearing all HelloWatt statistics for PDL(s): %s", ", ".join(pdls_to_clear)
         )
+
+        from homeassistant.components.recorder import get_instance
 
         # Clear statistics data and metadata using recorder session
         def _clear_statistics_with_metadata():

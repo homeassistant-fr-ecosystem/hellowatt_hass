@@ -86,6 +86,7 @@ ignore = [
     "SIM105",  # use contextlib.suppress
     "DTZ001",  # datetime without timezone (we handle this in the code)
     "DTZ005",  # datetime.now without timezone (we handle this in the code)
+    "I001",    # import block is unsorted - let isort handle this
 ]
 
 [tool.ruff.lint.isort]
@@ -134,6 +135,9 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 skip_glob = ["**/__pycache__", "**/venv/*", "**/env/*"]
+# Match ruff's isort configuration
+force_sort_within_sections = true
+combine_as_imports = true
 
 # ============================================================================
 # Mypy Configuration (Type Checking)
@@ -152,6 +156,10 @@ no_implicit_reexport = true
 warn_return_any = true
 warn_unreachable = true
 strict_equality = true
+# Exclude tests and venv from checking
+exclude = ['tests/', '.venv/', 'venv/']
+# Namespace packages support for Home Assistant integrations
+namespace_packages = true
 
 # Specific modules
 [[tool.mypy.overrides]]
@@ -221,3 +229,11 @@ precision = 2
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+# ============================================================================
+# Bandit Configuration (Security Linting)
+# ============================================================================
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "venv"]
+# Skip low-severity checks that are acceptable in this context
+skips = ["B110", "B112"]  # try-except-pass and try-except-continue
