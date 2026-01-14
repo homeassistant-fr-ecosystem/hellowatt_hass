@@ -164,22 +164,34 @@ async def async_setup_entry(
 
     entities: list[HelloWattSensor] = []
 
-    # Create sensors for each PDL
+    # Create sensors for each PDL. Wait for the coordinator's first
+    # refresh so we can create only the sensors that actually have data
+    # (e.g. no gas sensors if there's no gas contract).
     for pdl, coordinator in coordinators.items():
-        # Add all sensor types
+        try:
+            await coordinator.async_config_entry_first_refresh()
+        except Exception:
+            # If the initial refresh fails, fall back to creating no sensors
+            # for this coordinator to avoid creating entities without data.
+            continue
+
+        available_keys = set(coordinator.data.keys()) if coordinator.data else set()
+
+        # Add only sensor types that are present in the coordinator data
         for sensor_key, sensor_config in SENSOR_TYPES.items():
-            entities.append(
-                HelloWattSensor(
-                    coordinator,
-                    pdl,
-                    sensor_key,
-                    sensor_config["name"],
-                    sensor_config["device_class"],
-                    sensor_config["unit"],
-                    sensor_config["state_class"],
-                    sensor_config["icon"],
+            if sensor_key in available_keys:
+                entities.append(
+                    HelloWattSensor(
+                        coordinator,
+                        pdl,
+                        sensor_key,
+                        sensor_config["name"],
+                        sensor_config["device_class"],
+                        sensor_config["unit"],
+                        sensor_config["state_class"],
+                        sensor_config["icon"],
+                    )
                 )
-            )
 
     async_add_entities(entities)
 
@@ -218,7 +230,9 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
         self._pdl: str = pdl
         self._key_id: str = key_id
         self._attr_name: str = name
+        # Ensure unique_id uses the PDL once so it starts with
         self._attr_unique_id: str = f"{DOMAIN}_{pdl}_{key_id}"
+        self._attr_has_entity_name: bool = True
         self._attr_device_class: SensorDeviceClass | None = device_class
         self._attr_state_class: SensorStateClass | None = state_class
         self._attr_native_unit_of_measurement: str | None = unit
@@ -259,7 +273,14 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
             Sensor value from coordinator data, or None if not available
         """
         value = self.coordinator.data.get(self._key_id)
-        return value if isinstance(value, float | int | str) else None
+        # Filter out empty strings and invalid values
+        if (
+            value is None
+            or value == ""
+            or (isinstance(value, str) and not value.strip())
+        ):
+            return None
+        return value if isinstance(value, (float, int, str)) else None
 
     @property
     def available(self) -> bool:

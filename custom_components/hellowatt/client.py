@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any, TypeVar, cast
 
@@ -15,6 +16,10 @@ HEADERS: dict[str, str] = {
     "X-Requested-With": "XMLHttpRequest",
     "Referer": "https://www.hellowatt.fr/mon-compte/",
 }
+
+# Retry configuration for handling 429 responses
+MAX_RETRIES = 3
+BACKOFF_BASE = 2
 
 # Type variable for generic return types
 T = TypeVar("T")
@@ -87,24 +92,53 @@ class HelloWattApiClient:
         if "headers" not in kwargs:
             kwargs["headers"] = self._get_headers()
 
-        async with self._session.request(method, url, **kwargs) as response:
-            # Handle authentication failure - retry once after re-authenticating
-            if response.status == 403:
-                LOGGER.debug("Received 403, attempting re-authentication")
-                await self.authenticate()
+        attempts = 0
+        while True:
+            async with self._session.request(method, url, **kwargs) as response:
+                # Handle rate limiting (429) with backoff and respect Retry-After
+                if response.status == 429:
+                    attempts += 1
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        wait = (
+                            int(retry_after)
+                            if retry_after is not None
+                            else BACKOFF_BASE**attempts
+                        )
+                    except Exception:
+                        wait = BACKOFF_BASE**attempts
 
-                # Refresh headers after authentication
-                kwargs["headers"] = self._get_headers()
+                    if attempts >= MAX_RETRIES:
+                        LOGGER.error("Max retries reached for %s, status=429", url)
+                        response.raise_for_status()
 
-                # Retry the request
-                async with self._session.request(
-                    method, url, **kwargs
-                ) as retry_response:
-                    return await self._handle_response(
-                        retry_response, url, handle_500_as_no_data
+                    LOGGER.warning(
+                        "Received 429 for %s, retrying after %s seconds (attempt %s)",
+                        url,
+                        wait,
+                        attempts,
                     )
+                    await asyncio.sleep(wait)
+                    # retry the loop
+                    continue
 
-            return await self._handle_response(response, url, handle_500_as_no_data)
+                # Handle authentication failure - retry once after re-authenticating
+                if response.status == 403:
+                    LOGGER.debug("Received 403, attempting re-authentication")
+                    await self.authenticate()
+
+                    # Refresh headers after authentication
+                    kwargs["headers"] = self._get_headers()
+
+                    # Retry the request once after re-authenticating
+                    async with self._session.request(
+                        method, url, **kwargs
+                    ) as retry_response:
+                        return await self._handle_response(
+                            retry_response, url, handle_500_as_no_data
+                        )
+
+                return await self._handle_response(response, url, handle_500_as_no_data)
 
     async def _handle_response(
         self,
@@ -168,9 +202,38 @@ class HelloWattApiClient:
         try:
             login_url = "https://www.hellowatt.fr/accounts/login/"
 
-            # 1. Get login page to obtain CSRF cookie
-            async with self._session.get(login_url) as response:
-                response.raise_for_status()
+            # 1. Get login page to obtain CSRF cookie (handle 429 with backoff)
+            attempts = 0
+            while True:
+                async with self._session.get(login_url) as response:
+                    if response.status == 429:
+                        attempts += 1
+                        retry_after = response.headers.get("Retry-After")
+                        try:
+                            wait = (
+                                int(retry_after)
+                                if retry_after is not None
+                                else BACKOFF_BASE**attempts
+                            )
+                        except Exception:
+                            wait = BACKOFF_BASE**attempts
+
+                        if attempts >= MAX_RETRIES:
+                            LOGGER.error(
+                                "Max retries reached for login GET %s", login_url
+                            )
+                            response.raise_for_status()
+
+                        LOGGER.warning(
+                            "Login GET returned 429, retrying after %s seconds (attempt %s)",
+                            wait,
+                            attempts,
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+
+                    response.raise_for_status()
+                    break
 
             # Extract CSRF token from cookie jar
             csrftoken = ""
@@ -179,7 +242,7 @@ class HelloWattApiClient:
                     csrftoken = cookie.value
                     break
 
-            # 2. Post login credentials with CSRF token
+            # 2. Post login credentials with CSRF token (handle 429)
             data = {
                 "login": self._username,
                 "password": self._password,
@@ -191,40 +254,100 @@ class HelloWattApiClient:
                 "Referer": login_url,
             }
 
-            async with self._session.post(
-                login_url, data=data, headers=headers
-            ) as response:
-                response.raise_for_status()
-
-                # Parse JSON response for error messages
-                resp_json: dict[str, Any] | None = None
-                try:
-                    resp_json = await response.json()
-                except (aiohttp.ContentTypeError, ValueError):
-                    pass
-
-                if resp_json:
-                    form = resp_json.get("form", {})
-                    if form.get("errors"):
-                        raise Exception(f"Authentication failed: {form['errors']}")
-                    for field_name, field_data in form.get("fields", {}).items():
-                        if field_data.get("errors"):
-                            raise Exception(
-                                f"Authentication failed ({field_name}): {field_data['errors']}"
+            attempts = 0
+            while True:
+                async with self._session.post(
+                    login_url, data=data, headers=headers
+                ) as response:
+                    if response.status == 429:
+                        attempts += 1
+                        retry_after = response.headers.get("Retry-After")
+                        try:
+                            wait = (
+                                int(retry_after)
+                                if retry_after is not None
+                                else BACKOFF_BASE**attempts
                             )
+                        except Exception:
+                            wait = BACKOFF_BASE**attempts
 
-                # Verify session cookie was set
-                if not any(
-                    cookie.key == "sessionid" for cookie in self._session.cookie_jar
-                ):
-                    raise Exception("Authentication failed: No session cookie received")
+                        if attempts >= MAX_RETRIES:
+                            LOGGER.error(
+                                "Max retries reached for login POST %s", login_url
+                            )
+                            response.raise_for_status()
 
-            # 3. Fetch homes after successful authentication
-            # Note: Direct request to avoid retry logic during authentication
+                        LOGGER.warning(
+                            "Login POST returned 429, retrying after %s seconds (attempt %s)",
+                            wait,
+                            attempts,
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+
+                    response.raise_for_status()
+
+                    # Parse JSON response for error messages
+                    resp_json: dict[str, Any] | None = None
+                    try:
+                        resp_json = await response.json()
+                    except (aiohttp.ContentTypeError, ValueError):
+                        pass
+
+                    if resp_json:
+                        form = resp_json.get("form", {})
+                        if form.get("errors"):
+                            raise Exception(f"Authentication failed: {form['errors']}")
+                        for field_name, field_data in form.get("fields", {}).items():
+                            if field_data.get("errors"):
+                                raise Exception(
+                                    f"Authentication failed ({field_name}): {field_data['errors']}"
+                                )
+
+                    # Verify session cookie was set
+                    if not any(
+                        cookie.key == "sessionid" for cookie in self._session.cookie_jar
+                    ):
+                        raise Exception(
+                            "Authentication failed: No session cookie received"
+                        )
+
+                    break
+
+            # 3. Fetch homes after successful authentication (handle 429)
             url = f"{API_URL}/homes"
-            async with self._session.get(url, headers=self._get_headers()) as response:
-                response.raise_for_status()
-                self._homes = await response.json()
+            attempts = 0
+            while True:
+                async with self._session.get(
+                    url, headers=self._get_headers()
+                ) as response:
+                    if response.status == 429:
+                        attempts += 1
+                        retry_after = response.headers.get("Retry-After")
+                        try:
+                            wait = (
+                                int(retry_after)
+                                if retry_after is not None
+                                else BACKOFF_BASE**attempts
+                            )
+                        except Exception:
+                            wait = BACKOFF_BASE**attempts
+
+                        if attempts >= MAX_RETRIES:
+                            LOGGER.error("Max retries reached for homes GET %s", url)
+                            response.raise_for_status()
+
+                        LOGGER.warning(
+                            "Homes GET returned 429, retrying after %s seconds (attempt %s)",
+                            wait,
+                            attempts,
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+
+                    response.raise_for_status()
+                    self._homes = await response.json()
+                    break
 
             LOGGER.debug(
                 "Authentication successful, found %d home(s)", len(self._homes)

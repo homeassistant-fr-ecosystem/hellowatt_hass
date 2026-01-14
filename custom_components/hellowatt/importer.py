@@ -9,9 +9,6 @@ import traceback
 import zoneinfo
 
 from dateutil.relativedelta import relativedelta
-from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-from homeassistant.components.recorder.statistics import async_import_statistics
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -59,6 +56,12 @@ async def _import_statistics(
 
     Returns the number of sensor types imported.
     """
+    from homeassistant.components.recorder.models import (
+        StatisticData,
+        StatisticMetaData,
+    )
+    from homeassistant.components.recorder.statistics import async_import_statistics
+
     if not data or "values" not in data:
         return 0
 
@@ -484,10 +487,27 @@ async def async_clear_statistics(
 
     This clears both the statistics data AND metadata to remove old invalid entries.
     """
-    target_pdl = call.data.get("pdl")
+    from homeassistant.components.recorder import get_instance
 
-    data = hass.data[DOMAIN][entry.entry_id]
+    LOGGER.info("=" * 80)
+    LOGGER.info("HELLOWATT CLEAR STATISTICS SERVICE - EXECUTION STARTED")
+    LOGGER.info("=" * 80)
+
+    target_pdl = call.data.get("pdl")
+    LOGGER.info("Target PDL from service call: %s", target_pdl or "ALL")
+
+    try:
+        data = hass.data[DOMAIN][entry.entry_id]
+        LOGGER.info("Retrieved integration data for entry_id: %s", entry.entry_id)
+    except KeyError as err:
+        LOGGER.error("Failed to find integration data in hass.data: %s", err)
+        LOGGER.error("Available domains: %s", list(hass.data.keys()))
+        if DOMAIN in hass.data:
+            LOGGER.error("Available entry IDs: %s", list(hass.data[DOMAIN].keys()))
+        return
+
     coordinators_dict = data["coordinators"]
+    LOGGER.info("Found %d coordinator(s)", len(coordinators_dict))
 
     # Filter coordinators by PDL if specified
     if target_pdl:
@@ -502,6 +522,10 @@ async def async_clear_statistics(
 
     LOGGER.info(
         "Clearing all HelloWatt statistics for PDL(s): %s", ", ".join(pdls_to_clear)
+    )
+    LOGGER.info(
+        "Will search for statistics matching patterns: sensor.%%{pdl}%%, %s:{pdl}%%, %%{pdl}%%",
+        DOMAIN,
     )
 
     # Clear statistics data and metadata using recorder session
@@ -524,28 +548,106 @@ async def async_clear_statistics(
             )
 
         with session_scope(hass=hass, read_only=False) as session:
-            # Find ALL statistics metadata that contains any of our PDLs
-            # We filter by statistic_id containing the PDL because source is usually 'recorder'
-            filters = [
-                StatisticsMeta.statistic_id.like(f"%{pdl}%") for pdl in pdls_to_clear
-            ]
+            # Find ALL statistics metadata for HelloWatt that match our PDLs
+            # Look for both sensor.* and hellowatt:* patterns
+            filters = []
+            for pdl in pdls_to_clear:
+                # Match sensor entity IDs like sensor.hellowatt_PDL_*
+                filters.append(StatisticsMeta.statistic_id.like(f"sensor.%{pdl}%"))
+                # Match statistics IDs like hellowatt:PDL_*
+                filters.append(StatisticsMeta.statistic_id.like(f"{DOMAIN}:{pdl}%"))
+                # Match any other pattern containing the PDL
+                filters.append(StatisticsMeta.statistic_id.like(f"%{pdl}%"))
+
             if not filters:
                 return 0
 
             all_metadata = session.query(StatisticsMeta).filter(or_(*filters)).all()
+
+            LOGGER.info(
+                "Database query found %d total metadata entries matching PDL patterns",
+                len(all_metadata),
+            )
+
+            # If no metadata found, let's see ALL statistics in the database to understand what's there
+            if len(all_metadata) == 0:
+                LOGGER.info(
+                    "No metadata found with PDL filter. Querying ALL statistics to see what exists..."
+                )
+                all_stats = session.query(StatisticsMeta).limit(100).all()
+                LOGGER.info(
+                    "Found %d total statistics in database (showing first 100):",
+                    len(all_stats),
+                )
+                for stat in all_stats[:20]:  # Show first 20 to avoid log spam
+                    LOGGER.debug(
+                        "  - statistic_id=%s, source=%s, unit=%s",
+                        stat.statistic_id,
+                        stat.source,
+                        stat.unit_of_measurement,
+                    )
+                if len(all_stats) > 20:
+                    LOGGER.info("  ... and %d more statistics", len(all_stats) - 20)
+
+            # Log all found metadata for debugging
+            for meta in all_metadata:
+                LOGGER.debug(
+                    "Found metadata: id=%s, statistic_id=%s, source=%s, unit=%s",
+                    meta.id,
+                    meta.statistic_id,
+                    meta.source,
+                    meta.unit_of_measurement,
+                )
 
             metadata_ids_to_delete = []
             stats_found = []
 
             for meta in all_metadata:
                 stat_id = meta.statistic_id
-                # Check if this statistic_id contains any of our target PDLs
-                # This handles both "hellowatt:PDL_sensor" and any malformed variants
+                # Only delete statistics that belong to HelloWatt
+                # Check if statistic_id contains our domain or PDL
+                should_delete = False
+                matched_pdl = None
                 for pdl in pdls_to_clear:
                     if pdl in stat_id:
-                        metadata_ids_to_delete.append(meta.id)
-                        stats_found.append(stat_id)
-                        break
+                        # PDL is in the stat_id, now check if it's a HelloWatt stat
+                        if DOMAIN in stat_id:
+                            should_delete = True
+                            matched_pdl = pdl
+                            LOGGER.debug(
+                                "Match: %s contains PDL '%s' AND domain '%s'",
+                                stat_id,
+                                pdl,
+                                DOMAIN,
+                            )
+                            break
+                        if f"sensor.hellowatt_{pdl}" in stat_id:
+                            should_delete = True
+                            matched_pdl = pdl
+                            LOGGER.debug(
+                                "Match: %s contains pattern 'sensor.hellowatt_%s'",
+                                stat_id,
+                                pdl,
+                            )
+                            break
+                        LOGGER.debug(
+                            "Partial match: %s contains PDL '%s' but not domain '%s' or sensor pattern",
+                            stat_id,
+                            pdl,
+                            DOMAIN,
+                        )
+
+                if should_delete:
+                    metadata_ids_to_delete.append(meta.id)
+                    stats_found.append(stat_id)
+                    LOGGER.debug(
+                        "✓ Marking for deletion: %s (metadata_id=%s, matched_pdl=%s)",
+                        stat_id,
+                        meta.id,
+                        matched_pdl,
+                    )
+                else:
+                    LOGGER.debug("✗ Skipping (not HelloWatt): %s", stat_id)
 
             if metadata_ids_to_delete:
                 LOGGER.info(
@@ -555,17 +657,26 @@ async def async_clear_statistics(
                 )
 
                 # Delete statistics data first (both long-term and short-term)
+                LOGGER.info(
+                    "Deleting statistics data for metadata IDs: %s",
+                    metadata_ids_to_delete,
+                )
+
                 deleted_stats = session.execute(
                     delete(Statistics).where(
                         Statistics.metadata_id.in_(metadata_ids_to_delete)
                     )
                 ).rowcount
 
+                LOGGER.info("Deleted %d long-term statistics rows", deleted_stats)
+
                 deleted_short = session.execute(
                     delete(StatisticsShortTerm).where(
                         StatisticsShortTerm.metadata_id.in_(metadata_ids_to_delete)
                     )
                 ).rowcount
+
+                LOGGER.info("Deleted %d short-term statistics rows", deleted_short)
 
                 # Then delete metadata
                 deleted_meta = session.execute(
@@ -574,10 +685,15 @@ async def async_clear_statistics(
                     )
                 ).rowcount
 
+                LOGGER.info("Deleted %d metadata rows", deleted_meta)
+
+                # Commit the transaction
+                LOGGER.debug("Committing database transaction...")
                 session.commit()
+                LOGGER.debug("Database transaction committed successfully")
 
                 LOGGER.info(
-                    "Deleted %d metadata entries, %d long-term statistics, and %d short-term statistics",
+                    "SUMMARY: Deleted %d metadata entries, %d long-term statistics, and %d short-term statistics",
                     deleted_meta,
                     deleted_stats,
                     deleted_short,
@@ -593,8 +709,17 @@ async def async_clear_statistics(
 
     if deleted_count > 0:
         LOGGER.info(
-            "Successfully cleared all statistics and metadata. Please restart Home Assistant before importing new data."
+            "Successfully cleared %d statistics entries. "
+            "IMPORTANT: You MUST restart Home Assistant for changes to appear in the Energy Dashboard. "
+            "The Energy Dashboard caches statistics data and will not reflect changes until after a restart.",
+            deleted_count,
         )
+        LOGGER.info("=" * 80)
+        LOGGER.info("HELLOWATT CLEAR STATISTICS SERVICE - COMPLETED SUCCESSFULLY")
+        LOGGER.info("=" * 80)
         return
 
-    LOGGER.info("No statistics found to clear")
+    LOGGER.info("No statistics found to clear for the specified PDL(s)")
+    LOGGER.info("=" * 80)
+    LOGGER.info("HELLOWATT CLEAR STATISTICS SERVICE - NO STATISTICS TO DELETE")
+    LOGGER.info("=" * 80)

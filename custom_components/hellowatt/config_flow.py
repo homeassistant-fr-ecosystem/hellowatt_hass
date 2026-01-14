@@ -56,10 +56,23 @@ class HelloWattConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ig
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Use username as unique ID to prevent duplicate entries
-            await self.async_set_unique_id(user_input[CONF_USERNAME])
+            # Normalize username (email) for comparison
+            username = user_input[CONF_USERNAME].lower().strip()
+
+            # Check if this account already exists by comparing username in existing entries
+            for entry in self._async_current_entries():
+                existing_username = entry.data.get(CONF_USERNAME, "").lower().strip()
+                if existing_username == username:
+                    return self.async_abort(reason="already_configured")
+
+            # Set unique ID to prevent duplicates
+            await self.async_set_unique_id(username)
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title="HelloWatt", data=user_input)
+
+            # Create entry with username as title for clarity
+            return self.async_create_entry(
+                title=f"HelloWatt ({username})", data=user_input
+            )
 
         return self.async_show_form(
             step_id="user",
