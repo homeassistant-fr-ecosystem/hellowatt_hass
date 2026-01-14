@@ -1,9 +1,10 @@
 """API Client for HelloWatt."""
+
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import datetime
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
+
 import aiohttp
 
 from .const import API_URL, LOGGER
@@ -17,6 +18,7 @@ HEADERS: dict[str, str] = {
 
 # Type variable for generic return types
 T = TypeVar("T")
+
 
 class HelloWattApiClient:
     """HelloWatt API Client."""
@@ -61,7 +63,7 @@ class HelloWattApiClient:
         url: str,
         handle_500_as_no_data: bool = False,
         **kwargs: Any,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Make HTTP request with automatic retry on 403 (authentication failure).
 
         This method centralizes the retry logic that was previously duplicated
@@ -95,7 +97,9 @@ class HelloWattApiClient:
                 kwargs["headers"] = self._get_headers()
 
                 # Retry the request
-                async with self._session.request(method, url, **kwargs) as retry_response:
+                async with self._session.request(
+                    method, url, **kwargs
+                ) as retry_response:
                     return await self._handle_response(
                         retry_response, url, handle_500_as_no_data
                     )
@@ -107,7 +111,7 @@ class HelloWattApiClient:
         response: aiohttp.ClientResponse,
         url: str,
         handle_500_as_no_data: bool = False,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle HTTP response with appropriate error logging.
 
         Args:
@@ -125,7 +129,7 @@ class HelloWattApiClient:
         if response.status == 500 and handle_500_as_no_data:
             LOGGER.debug(
                 "Gas data not available (status 500) - likely no gas contract for URL %s",
-                url
+                url,
             )
             raise Exception("No gas contract available")
 
@@ -136,11 +140,12 @@ class HelloWattApiClient:
                 "API error for %s: status=%s, response=%s",
                 url,
                 response.status,
-                response_text[:500]  # Limit to 500 chars
+                response_text[:500],  # Limit to 500 chars
             )
 
         response.raise_for_status()
-        return await response.json()
+        result: dict[str, Any] | list[dict[str, Any]] = await response.json()
+        return result
 
     async def authenticate(self) -> None:
         """Authenticate with HelloWatt API and fetch homes.
@@ -186,14 +191,16 @@ class HelloWattApiClient:
                 "Referer": login_url,
             }
 
-            async with self._session.post(login_url, data=data, headers=headers) as response:
+            async with self._session.post(
+                login_url, data=data, headers=headers
+            ) as response:
                 response.raise_for_status()
 
                 # Parse JSON response for error messages
                 resp_json: dict[str, Any] | None = None
                 try:
                     resp_json = await response.json()
-                except Exception:
+                except (aiohttp.ContentTypeError, ValueError):
                     pass
 
                 if resp_json:
@@ -207,7 +214,9 @@ class HelloWattApiClient:
                             )
 
                 # Verify session cookie was set
-                if not any(cookie.key == "sessionid" for cookie in self._session.cookie_jar):
+                if not any(
+                    cookie.key == "sessionid" for cookie in self._session.cookie_jar
+                ):
                     raise Exception("Authentication failed: No session cookie received")
 
             # 3. Fetch homes after successful authentication
@@ -217,7 +226,9 @@ class HelloWattApiClient:
                 response.raise_for_status()
                 self._homes = await response.json()
 
-            LOGGER.debug("Authentication successful, found %d home(s)", len(self._homes))
+            LOGGER.debug(
+                "Authentication successful, found %d home(s)", len(self._homes)
+            )
         finally:
             self._authenticating = False
 
@@ -251,7 +262,8 @@ class HelloWattApiClient:
             "endDate": end_date.isoformat(),
         }
 
-        return await self._request_with_retry("GET", url, params=params)
+        result = await self._request_with_retry("GET", url, params=params)
+        return cast("dict[str, Any]", result)
 
     async def get_daily_gas_consumption(
         self, home_id: str, start_date: datetime, end_date: datetime
@@ -275,9 +287,10 @@ class HelloWattApiClient:
             "endDate": end_date.isoformat(),
         }
 
-        return await self._request_with_retry(
+        result = await self._request_with_retry(
             "GET", url, params=params, handle_500_as_no_data=True
         )
+        return cast("dict[str, Any]", result)
 
     async def get_yearly_temperature(
         self, home_id: str, start_date: datetime, end_date: datetime
@@ -298,7 +311,8 @@ class HelloWattApiClient:
             "endDate": end_date.isoformat(),
         }
 
-        return await self._request_with_retry("GET", url, params=params)
+        result = await self._request_with_retry("GET", url, params=params)
+        return cast("dict[str, Any]", result)
 
     async def get_contracts(self, home_id: str) -> list[dict[str, Any]]:
         """Get energy contracts for a home.
@@ -310,7 +324,8 @@ class HelloWattApiClient:
             List of contracts with provider and offer information
         """
         url = f"{API_URL}/homes/{home_id}/contracts"
-        return await self._request_with_retry("GET", url)
+        result = await self._request_with_retry("GET", url)
+        return cast("list[dict[str, Any]]", result)
 
     async def get_homes(self) -> list[dict[str, Any]]:
         """Get list of homes/PDLs associated with the account.
@@ -319,4 +334,5 @@ class HelloWattApiClient:
             List of homes with address and PDL information
         """
         url = f"{API_URL}/homes"
-        return await self._request_with_retry("GET", url)
+        result = await self._request_with_retry("GET", url)
+        return cast("list[dict[str, Any]]", result)

@@ -19,5 +19,21 @@
     "abort": {
       "already_configured": "Device is already configured"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HelloWatt Options",
+        "description": "Configure HelloWatt integration settings.",
+        "data": {
+          "update_interval": "Update Interval (hours)",
+          "lookback_days": "Data Lookback Period (days)"
+        },
+        "data_description": {
+          "update_interval": "How often to fetch new data from HelloWatt API (1-24 hours)",
+          "lookback_days": "How many days of historical data to fetch (3-30 days)"
+        }
+      }
+    }
   }
 }

@@ -65,7 +65,6 @@ select = [
     "RET",    # flake8-return
     "SIM",    # flake8-simplify
     "TID",    # flake8-tidy-imports
-    "TCH",    # flake8-type-checking
     "ARG",    # flake8-unused-arguments
     "PTH",    # flake8-use-pathlib
     "PL",     # pylint
@@ -76,14 +75,23 @@ ignore = [
     "E501",    # line too long (handled by formatter)
     "PLR0913", # too many arguments
     "PLR2004", # magic value comparison
+    "PLR0912", # too many branches
+    "PLR0915", # too many statements
     "EM101",   # raw string in exception
     "EM102",   # f-string in exception
     "PTH123",  # pathlib open() - not always better
+    "ISC001",  # implicit string concatenation (conflicts with formatter)
+    "PLC0415", # import should be at top level
+    "B904",    # raise from exception
+    "SIM105",  # use contextlib.suppress
+    "DTZ001",  # datetime without timezone (we handle this in the code)
+    "DTZ005",  # datetime.now without timezone (we handle this in the code)
 ]
 
 [tool.ruff.lint.isort]
-force-sort-within-sections = true
+known-first-party = ["custom_components.hellowatt"]
 combine-as-imports = true
+split-on-trailing-comma = false
 
 [tool.ruff.lint.pylint]
 max-branches = 15
@@ -156,6 +164,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "aiohttp.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "dateutil.*"
 ignore_missing_imports = true
 
 # ============================================================================

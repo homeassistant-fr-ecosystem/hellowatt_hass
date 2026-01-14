@@ -1,19 +1,25 @@
 """Sensor platform for HelloWatt."""
+
 from __future__ import annotations
 
 from typing import Any
 
 from homeassistant.components.sensor import (
-    SensorEntity,
     SensorDeviceClass,
+    SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfTemperature, UnitOfMass, CURRENCY_EURO
+from homeassistant.const import (
+    CURRENCY_EURO,
+    UnitOfEnergy,
+    UnitOfMass,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 from .coordinator import HelloWattCoordinator
@@ -141,6 +147,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
     },
 }
 
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -256,7 +263,8 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
         Returns:
             Sensor value from coordinator data, or None if not available
         """
-        return self.coordinator.data.get(self._key_id)
+        value = self.coordinator.data.get(self._key_id)
+        return value if isinstance(value, float | int | str) else None
 
     @property
     def available(self) -> bool:

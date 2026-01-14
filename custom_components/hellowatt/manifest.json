@@ -3,9 +3,10 @@
   "name": "HelloWatt",
   "codeowners": [],
   "config_flow": true,
-  "dependencies": [],
-  "documentation": "https://github.com/yourusername/ha-hellowatt",
+  "dependencies": ["recorder"],
+  "documentation": "https://github.com/homeassistant-fr-ecosystem/hellowatt_hass",
+  "integration_type": "hub",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "0.1.0"
 }

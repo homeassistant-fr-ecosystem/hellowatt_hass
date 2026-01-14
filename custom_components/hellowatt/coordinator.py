@@ -1,18 +1,24 @@
 """DataUpdateCoordinator for HelloWatt."""
+
 from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER
 from .client import HelloWattApiClient
+from .const import (
+    DEFAULT_LOOKBACK_DAYS,
+    DEFAULT_TEMPERATURE_LOOKBACK_DAYS,
+    DEFAULT_UPDATE_INTERVAL_HOURS,
+    DOMAIN,
+    LOGGER,
+)
+
 
 class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching HelloWatt data.
@@ -25,6 +31,7 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         hass: HomeAssistant,
         client: HelloWattApiClient,
+        entry: ConfigEntry,
         pdl: str,
         home_id: str,
         home: dict[str, Any],
@@ -34,17 +41,24 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Args:
             hass: Home Assistant instance
             client: Authenticated HelloWatt API client
+            entry: Config entry for this integration
             pdl: Point de Livraison (delivery point) identifier
             home_id: Home identifier from HelloWatt API
             home: Home data dictionary containing address and area info
         """
+        # Get update interval from options, fallback to default
+        update_hours = entry.options.get(
+            "update_interval", DEFAULT_UPDATE_INTERVAL_HOURS
+        )
+
         super().__init__(
             hass,
             LOGGER,
             name=f"{DOMAIN}_{pdl}",
-            update_interval=timedelta(hours=1),
+            update_interval=timedelta(hours=update_hours),
         )
         self.client: HelloWattApiClient = client
+        self.entry: ConfigEntry = entry
         self.pdl: str = pdl
         self.home_id: str = home_id
         self.home: dict[str, Any] = home
@@ -64,22 +78,34 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             UpdateFailed: If API communication fails
         """
         try:
-            # Fetch last 7 days to ensure we have data
+            # Fetch last N days to ensure we have data
+            # Get lookback days from options, fallback to default
+            lookback_days = self.entry.options.get(
+                "lookback_days", DEFAULT_LOOKBACK_DAYS
+            )
             end_date = dt_util.now()
-            start_date = end_date - timedelta(days=7)
+            start_date = end_date - timedelta(days=lookback_days)
 
             # Fetch electricity consumption
-            data_conso = await self.client.get_daily_consumption(self.home_id, start_date, end_date)
+            data_conso = await self.client.get_daily_consumption(
+                self.home_id, start_date, end_date
+            )
 
             # Try to fetch gas consumption (may fail if no gas contract)
             try:
-                data_gas = await self.client.get_daily_gas_consumption(self.home_id, start_date, end_date)
+                data_gas = await self.client.get_daily_gas_consumption(
+                    self.home_id, start_date, end_date
+                )
             except Exception:
                 data_gas = None
 
-            # Fetch temperature (last 365 days for monthly data)
-            start_date_temp = end_date - timedelta(days=365)
-            data_temp = await self.client.get_yearly_temperature(self.home_id, start_date_temp, end_date)
+            # Fetch temperature (last year for monthly data)
+            start_date_temp = end_date - timedelta(
+                days=DEFAULT_TEMPERATURE_LOOKBACK_DAYS
+            )
+            data_temp = await self.client.get_yearly_temperature(
+                self.home_id, start_date_temp, end_date
+            )
 
             # Fetch contracts
             contracts = await self.client.get_contracts(self.home_id)
@@ -105,9 +131,13 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     result["electricity_cost"] = sum(euros_detailed.values())
                     # Separate subscription and consumption costs
                     if "subscription" in euros_detailed:
-                        result["electricity_cost_subscription"] = euros_detailed.get("subscription", 0)
+                        result["electricity_cost_subscription"] = euros_detailed.get(
+                            "subscription", 0
+                        )
                     # Calculate consumption cost (total - subscription)
-                    consumption_cost = sum(v for k, v in euros_detailed.items() if k != "subscription")
+                    consumption_cost = sum(
+                        v for k, v in euros_detailed.items() if k != "subscription"
+                    )
                     if consumption_cost > 0:
                         result["electricity_cost_consumption"] = consumption_cost
 
@@ -126,8 +156,7 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 # Calculate weekly total (last 7 days available)
                 weekly_total = sum(
-                    sum(day.get("kwhDetailed", {}).values())
-                    for day in values_conso
+                    sum(day.get("kwhDetailed", {}).values()) for day in values_conso
                 )
                 result["electricity_weekly"] = weekly_total
 
@@ -151,9 +180,15 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         result["gas_cost"] = sum(euros_detailed_gas.values())
                         # Separate subscription and consumption costs
                         if "subscription" in euros_detailed_gas:
-                            result["gas_cost_subscription"] = euros_detailed_gas.get("subscription", 0)
+                            result["gas_cost_subscription"] = euros_detailed_gas.get(
+                                "subscription", 0
+                            )
                         # Calculate consumption cost (total - subscription)
-                        consumption_cost_gas = sum(v for k, v in euros_detailed_gas.items() if k != "subscription")
+                        consumption_cost_gas = sum(
+                            v
+                            for k, v in euros_detailed_gas.items()
+                            if k != "subscription"
+                        )
                         if consumption_cost_gas > 0:
                             result["gas_cost_consumption"] = consumption_cost_gas
 
@@ -165,8 +200,7 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     # Calculate weekly total (last 7 days available)
                     weekly_total_gas = sum(
-                        sum(day.get("kwhDetailed", {}).values())
-                        for day in values_gas
+                        sum(day.get("kwhDetailed", {}).values()) for day in values_gas
                     )
                     result["gas_weekly"] = weekly_total_gas
 
@@ -181,11 +215,15 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # Find active contract or fallback to the first one
                 active_contract = next(
                     (c for c in contracts if c.get("contractState") == "actual"),
-                    contracts[0]
+                    contracts[0],
                 )
                 if active_contract:
-                    result["contract_provider"] = active_contract.get("provider", {}).get("name")
-                    result["contract_offer"] = active_contract.get("offer", {}).get("name")
+                    result["contract_provider"] = active_contract.get(
+                        "provider", {}
+                    ).get("name")
+                    result["contract_offer"] = active_contract.get("offer", {}).get(
+                        "name"
+                    )
 
             # Process home info
             result["address"] = self.home.get("address")

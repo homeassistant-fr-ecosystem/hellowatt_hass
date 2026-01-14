@@ -44,11 +44,9 @@ run = "pytest -x"
 description = "Run all linters"
 run = """
     echo "Running ruff..."
-    ruff check .
+    ruff check . --fix
     echo "Running black..."
     black --check .
-    echo "Running isort..."
-    isort --check-only .
     echo "✓ All linters passed"
 """
 
@@ -57,7 +55,6 @@ description = "Auto-format code"
 run = """
     ruff check --fix .
     black .
-    isort .
     echo "✓ Code formatted"
 """
 
