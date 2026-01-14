@@ -1,24 +1,28 @@
 """Sensor platform for HelloWatt."""
+
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
-    SensorEntity,
     SensorDeviceClass,
+    SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfTemperature, UnitOfMass, CURRENCY_EURO
+from homeassistant.const import UnitOfEnergy, UnitOfMass, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import HelloWattCoordinator
 
 # Define sensor configurations with metadata
+# Added suggested_display_precision for better Energy Dashboard display
 SENSOR_TYPES: dict[str, dict[str, Any]] = {
     "electricity": {
         "name": "Electricity Daily",
@@ -26,6 +30,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "icon": "mdi:lightning-bolt",
+        "suggested_display_precision": 2,
     },
     "electricity_peak": {
         "name": "Electricity Peak Hours Daily",
@@ -33,6 +38,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "icon": "mdi:weather-sunny",
+        "suggested_display_precision": 2,
     },
     "electricity_off_peak": {
         "name": "Electricity Off-Peak Hours Daily",
@@ -40,20 +46,23 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "icon": "mdi:weather-night",
+        "suggested_display_precision": 2,
     },
     "electricity_yesterday": {
         "name": "Electricity Day Before",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:calendar-minus",
+        "suggested_display_precision": 2,
     },
     "electricity_weekly": {
         "name": "Electricity Weekly",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:calendar-week",
+        "suggested_display_precision": 1,
     },
     "gas": {
         "name": "Gas Daily",
@@ -61,20 +70,23 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "icon": "mdi:fire",
+        "suggested_display_precision": 2,
     },
     "gas_yesterday": {
         "name": "Gas Day Before",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:fire-circle",
+        "suggested_display_precision": 2,
     },
     "gas_weekly": {
         "name": "Gas Weekly",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:fire-alert",
+        "suggested_display_precision": 1,
     },
     "temperature": {
         "name": "Temperature",
@@ -82,6 +94,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "unit": UnitOfTemperature.CELSIUS,
         "state_class": SensorStateClass.MEASUREMENT,
         "icon": None,
+        "suggested_display_precision": 1,
     },
     "electricity_co2": {
         "name": "Electricity CO2 Emissions Daily",
@@ -89,6 +102,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "unit": UnitOfMass.KILOGRAMS,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "icon": "mdi:molecule-co2",
+        "suggested_display_precision": 3,
     },
     "gas_co2": {
         "name": "Gas CO2 Emissions Daily",
@@ -96,50 +110,58 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "unit": UnitOfMass.KILOGRAMS,
         "state_class": SensorStateClass.TOTAL_INCREASING,
         "icon": "mdi:molecule-co2",
+        "suggested_display_precision": 3,
     },
     "electricity_cost": {
         "name": "Electricity Cost Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:currency-eur",
+        "suggested_display_precision": 2,
     },
     "electricity_cost_consumption": {
         "name": "Electricity Cost Consumption Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:cash",
+        "suggested_display_precision": 2,
     },
     "electricity_cost_subscription": {
         "name": "Electricity Cost Subscription Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:cash-clock",
+        "suggested_display_precision": 2,
     },
     "gas_cost": {
         "name": "Gas Cost Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:currency-eur",
+        "suggested_display_precision": 2,
     },
     "gas_cost_consumption": {
         "name": "Gas Cost Consumption Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:cash",
+        "suggested_display_precision": 2,
     },
     "gas_cost_subscription": {
         "name": "Gas Cost Subscription Daily",
         "device_class": SensorDeviceClass.MONETARY,
-        "unit": CURRENCY_EURO,
+        "unit": "EUR",
         "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:cash-clock",
+        "suggested_display_precision": 2,
     },
 }
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -162,22 +184,30 @@ async def async_setup_entry(
 
     entities: list[HelloWattSensor] = []
 
-    # Create sensors for each PDL
+    # Create sensors for each PDL. Wait for the coordinator's first
+    # refresh so we can create only the sensors that actually have data
+    # (e.g. no gas sensors if there's no gas contract).
     for pdl, coordinator in coordinators.items():
-        # Add all sensor types
+        try:
+            await coordinator.async_config_entry_first_refresh()
+        except Exception:
+            # If the initial refresh fails, fall back to creating no sensors
+            # for this coordinator to avoid creating entities without data.
+            continue
+
+        available_keys = set(coordinator.data.keys()) if coordinator.data else set()
+
+        # Add only sensor types that are present in the coordinator data
         for sensor_key, sensor_config in SENSOR_TYPES.items():
-            entities.append(
-                HelloWattSensor(
-                    coordinator,
-                    pdl,
-                    sensor_key,
-                    sensor_config["name"],
-                    sensor_config["device_class"],
-                    sensor_config["unit"],
-                    sensor_config["state_class"],
-                    sensor_config["icon"],
+            if sensor_key in available_keys:
+                entities.append(
+                    HelloWattSensor(
+                        coordinator,
+                        pdl,
+                        sensor_key,
+                        sensor_config,
+                    )
                 )
-            )
 
     async_add_entities(entities)
 
@@ -187,6 +217,10 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
 
     Each sensor represents a specific data point (electricity, gas, cost, etc.)
     for a particular PDL (Point de Livraison).
+
+    Enhanced with Energy Dashboard compatibility:
+    - suggested_display_precision for cleaner dashboard display
+    - last_reset property for TOTAL_INCREASING sensors
     """
 
     def __init__(
@@ -194,11 +228,7 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
         coordinator: HelloWattCoordinator,
         pdl: str,
         key_id: str,
-        name: str,
-        device_class: SensorDeviceClass | None,
-        unit: str | None,
-        state_class: SensorStateClass | None,
-        icon: str | None,
+        sensor_config: dict[str, Any],
     ) -> None:
         """Initialize the sensor.
 
@@ -206,21 +236,23 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
             coordinator: Data coordinator for this PDL
             pdl: Point de Livraison identifier
             key_id: Sensor key in coordinator data (e.g., 'electricity', 'gas')
-            name: Human-readable sensor name
-            device_class: Home Assistant device class
-            unit: Unit of measurement
-            state_class: State class for statistics
-            icon: MDI icon identifier
+            sensor_config: Complete sensor configuration dictionary
         """
         super().__init__(coordinator)
         self._pdl: str = pdl
         self._key_id: str = key_id
-        self._attr_name: str = name
+        self._attr_name: str = sensor_config["name"]
+        # Ensure unique_id uses the PDL once so it starts with
         self._attr_unique_id: str = f"{DOMAIN}_{pdl}_{key_id}"
-        self._attr_device_class: SensorDeviceClass | None = device_class
-        self._attr_state_class: SensorStateClass | None = state_class
-        self._attr_native_unit_of_measurement: str | None = unit
-        self._attr_icon: str | None = icon
+        self._attr_has_entity_name: bool = True
+        self._attr_device_class: SensorDeviceClass | None = sensor_config["device_class"]
+        self._attr_state_class: SensorStateClass | None = sensor_config["state_class"]
+        self._attr_native_unit_of_measurement: str | None = sensor_config["unit"]
+        self._attr_icon: str | None = sensor_config["icon"]
+
+        # Energy Dashboard enhancements
+        if "suggested_display_precision" in sensor_config:
+            self._attr_suggested_display_precision: int = sensor_config["suggested_display_precision"]
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -256,7 +288,34 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
         Returns:
             Sensor value from coordinator data, or None if not available
         """
-        return self.coordinator.data.get(self._key_id)
+        value = self.coordinator.data.get(self._key_id)
+        # Filter out empty strings and invalid values
+        if (
+            value is None
+            or value == ""
+            or (isinstance(value, str) and not value.strip())
+        ):
+            return None
+        return value if isinstance(value, (float, int, str)) else None
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """Return the last reset time for TOTAL_INCREASING sensors.
+
+        For Energy Dashboard compatibility, TOTAL_INCREASING sensors should
+        reset at midnight each day in the local timezone.
+        This ensures proper energy tracking and statistics.
+
+        Returns:
+            Midnight of the current day in local timezone for TOTAL_INCREASING sensors,
+            None for other sensor types
+        """
+        if self._attr_state_class == SensorStateClass.TOTAL_INCREASING:
+            # Return midnight of today in the local timezone
+            # This tells HA that the counter resets daily
+            now = dt_util.now()
+            return now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return None
 
     @property
     def available(self) -> bool:

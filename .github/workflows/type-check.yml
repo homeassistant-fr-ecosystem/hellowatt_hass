@@ -1,0 +1,40 @@
+name: Type Check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mypy:
+    name: Mypy Type Checking
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mypy types-aiofiles
+          # Install type stubs for common packages
+          pip install types-setuptools types-PyYAML
+
+      - name: Run mypy type checker
+        run: mypy custom_components/hellowatt --show-error-codes --pretty
+        continue-on-error: true  # Allow to pass initially while fixing type issues
+
+      - name: Run mypy with strict mode (informational)
+        run: mypy custom_components/hellowatt --strict --show-error-codes --pretty
+        continue-on-error: true

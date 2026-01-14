@@ -9,15 +9,127 @@
           "password": "Password",
           "pdl": "Point de Livraison (PDL)"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate HelloWatt",
+        "description": "The credentials for {username} are invalid or have expired. Please enter your new password to continue.",
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect",
-      "invalid_auth": "Invalid authentication",
-      "unknown": "Unexpected error"
+      "cannot_connect": "Failed to connect to HelloWatt API",
+      "invalid_auth": "Invalid email or password",
+      "invalid_pdl": "Invalid PDL number",
+      "api_error": "API communication error",
+      "timeout": "Connection timeout",
+      "unknown": "Unexpected error occurred"
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "This account is already configured",
+      "reauth_successful": "Reauthentication successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HelloWatt Options",
+        "description": "Configure HelloWatt integration settings.",
+        "data": {
+          "update_interval": "Update Interval (hours)",
+          "lookback_days": "Data Lookback Period (days)"
+        },
+        "data_description": {
+          "update_interval": "How often to fetch new data from HelloWatt API (1-24 hours)",
+          "lookback_days": "How many days of historical data to fetch (3-30 days)"
+        }
+      }
+    }
+  },
+  "services": {
+    "import_historical_data": {
+      "name": "Import historical data",
+      "description": "Import historical consumption data from HelloWatt into Home Assistant statistics. Data is imported month by month to avoid API overload.",
+      "fields": {
+        "start_date": {
+          "name": "Start date",
+          "description": "Start date for historical data import (YYYY-MM-DD). Data will be imported from the first day of this month."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "End date for historical data import (YYYY-MM-DD). Defaults to today. Data will be imported up to the last day of this month."
+        },
+        "pdl": {
+          "name": "PDL",
+          "description": "PDL number to import data for. Leave empty to import for all configured PDLs."
+        }
+      }
+    },
+    "clear_statistics": {
+      "name": "Clear statistics",
+      "description": "Clear all HelloWatt statistics from Home Assistant database. Use this before re-importing data to avoid conflicts with old metadata.",
+      "fields": {
+        "pdl": {
+          "name": "PDL",
+          "description": "PDL number to clear statistics for. Leave empty to clear for all configured PDLs."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "electricity": {
+        "name": "Electricity Daily"
+      },
+      "electricity_peak": {
+        "name": "Electricity Peak Hours Daily"
+      },
+      "electricity_off_peak": {
+        "name": "Electricity Off-Peak Hours Daily"
+      },
+      "electricity_yesterday": {
+        "name": "Electricity Day Before"
+      },
+      "electricity_weekly": {
+        "name": "Electricity Weekly"
+      },
+      "gas": {
+        "name": "Gas Daily"
+      },
+      "gas_yesterday": {
+        "name": "Gas Day Before"
+      },
+      "gas_weekly": {
+        "name": "Gas Weekly"
+      },
+      "temperature": {
+        "name": "Temperature"
+      },
+      "electricity_co2": {
+        "name": "Electricity CO2 Emissions Daily"
+      },
+      "gas_co2": {
+        "name": "Gas CO2 Emissions Daily"
+      },
+      "electricity_cost": {
+        "name": "Electricity Cost Daily"
+      },
+      "electricity_cost_consumption": {
+        "name": "Electricity Cost Consumption Daily"
+      },
+      "electricity_cost_subscription": {
+        "name": "Electricity Cost Subscription Daily"
+      },
+      "gas_cost": {
+        "name": "Gas Cost Daily"
+      },
+      "gas_cost_consumption": {
+        "name": "Gas Cost Consumption Daily"
+      },
+      "gas_cost_subscription": {
+        "name": "Gas Cost Subscription Daily"
+      }
     }
   }
 }

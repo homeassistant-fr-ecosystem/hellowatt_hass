@@ -1,0 +1,23 @@
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-homeassistant-custom-component>=0.13.0
+pytest-timeout>=2.1.0
+
+# Linting & Formatting
+ruff>=0.1.9
+black>=23.12.1
+isort>=5.13.0
+
+# Type Checking
+mypy>=1.8.0
+types-aiofiles>=23.2.0
+types-setuptools>=69.0.0
+
+# Home Assistant (for development/testing)
+homeassistant>=2024.1.0
+psutil-home-assistant
+
+# Additional useful tools
+pre-commit>=3.6.0

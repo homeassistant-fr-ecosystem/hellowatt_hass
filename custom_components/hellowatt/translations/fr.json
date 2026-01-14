@@ -1,0 +1,135 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Se connecter à HelloWatt",
+        "description": "Veuillez saisir vos identifiants API HelloWatt.",
+        "data": {
+          "username": "Email",
+          "password": "Mot de passe",
+          "pdl": "Point de Livraison (PDL)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Réauthentifier HelloWatt",
+        "description": "Les identifiants pour {username} sont invalides ou ont expiré. Veuillez saisir votre nouveau mot de passe pour continuer.",
+        "data": {
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Échec de connexion à l'API HelloWatt",
+      "invalid_auth": "Email ou mot de passe invalide",
+      "invalid_pdl": "Numéro de PDL invalide",
+      "api_error": "Erreur de communication avec l'API",
+      "timeout": "Délai d'attente dépassé",
+      "unknown": "Erreur inattendue"
+    },
+    "abort": {
+      "already_configured": "Ce compte est déjà configuré",
+      "reauth_successful": "Réauthentification réussie"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options HelloWatt",
+        "description": "Configurer les paramètres de l'intégration HelloWatt.",
+        "data": {
+          "update_interval": "Intervalle de mise à jour (heures)",
+          "lookback_days": "Période de récupération des données (jours)"
+        },
+        "data_description": {
+          "update_interval": "Fréquence de récupération des nouvelles données depuis l'API HelloWatt (1-24 heures)",
+          "lookback_days": "Nombre de jours de données historiques à récupérer (3-30 jours)"
+        }
+      }
+    }
+  },
+  "services": {
+    "import_historical_data": {
+      "name": "Importer les données historiques",
+      "description": "Importer les données historiques de consommation depuis HelloWatt dans les statistiques de Home Assistant. Les données sont importées mois par mois pour éviter de surcharger l'API.",
+      "fields": {
+        "start_date": {
+          "name": "Date de début",
+          "description": "Date de début pour l'import des données historiques (AAAA-MM-JJ). Les données seront importées à partir du premier jour de ce mois."
+        },
+        "end_date": {
+          "name": "Date de fin",
+          "description": "Date de fin pour l'import des données historiques (AAAA-MM-JJ). Par défaut aujourd'hui. Les données seront importées jusqu'au dernier jour de ce mois."
+        },
+        "pdl": {
+          "name": "PDL",
+          "description": "Numéro de PDL pour lequel importer les données. Laisser vide pour importer pour tous les PDL configurés."
+        }
+      }
+    },
+    "clear_statistics": {
+      "name": "Effacer les statistiques",
+      "description": "Effacer toutes les statistiques HelloWatt de la base de données de Home Assistant. Utiliser ceci avant de réimporter les données pour éviter les conflits avec les anciennes métadonnées.",
+      "fields": {
+        "pdl": {
+          "name": "PDL",
+          "description": "Numéro de PDL pour lequel effacer les statistiques. Laisser vide pour effacer pour tous les PDL configurés."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "electricity": {
+        "name": "Électricité Quotidienne"
+      },
+      "electricity_peak": {
+        "name": "Électricité Heures Pleines Quotidienne"
+      },
+      "electricity_off_peak": {
+        "name": "Électricité Heures Creuses Quotidienne"
+      },
+      "electricity_yesterday": {
+        "name": "Électricité Veille"
+      },
+      "electricity_weekly": {
+        "name": "Électricité Hebdomadaire"
+      },
+      "gas": {
+        "name": "Gaz Quotidien"
+      },
+      "gas_yesterday": {
+        "name": "Gaz Veille"
+      },
+      "gas_weekly": {
+        "name": "Gaz Hebdomadaire"
+      },
+      "temperature": {
+        "name": "Température"
+      },
+      "electricity_co2": {
+        "name": "Émissions CO2 Électricité Quotidiennes"
+      },
+      "gas_co2": {
+        "name": "Émissions CO2 Gaz Quotidiennes"
+      },
+      "electricity_cost": {
+        "name": "Coût Électricité Quotidien"
+      },
+      "electricity_cost_consumption": {
+        "name": "Coût Consommation Électricité Quotidien"
+      },
+      "electricity_cost_subscription": {
+        "name": "Coût Abonnement Électricité Quotidien"
+      },
+      "gas_cost": {
+        "name": "Coût Gaz Quotidien"
+      },
+      "gas_cost_consumption": {
+        "name": "Coût Consommation Gaz Quotidien"
+      },
+      "gas_cost_subscription": {
+        "name": "Coût Abonnement Gaz Quotidien"
+      }
+    }
+  }
+}

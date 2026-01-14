@@ -1,0 +1,91 @@
+# mise configuration for HelloWatt Home Assistant Integration
+# https://mise.jdx.dev/
+
+[tools]
+python = "3.11"  # Primary Python version for development
+
+# Optional: Enable if you want to test against multiple Python versions
+# python = { version = "3.11", env = { PYTHON_VERSION = "3.11" } }
+
+[env]
+# Set virtual environment path
+_.python.venv = { path = ".venv", create = true }
+
+# Python environment variables
+PYTHONPATH = "."
+PYTHONDONTWRITEBYTECODE = "1"
+PYTHONUNBUFFERED = "1"
+
+[tasks.install]
+description = "Install development dependencies"
+run = """
+    python -m pip install --upgrade pip
+    pip install -r requirements-dev.txt
+    echo "✓ Development dependencies installed"
+"""
+
+[tasks.install-hooks]
+description = "Install pre-commit hooks"
+depends = ["install"]
+run = """
+    pre-commit install
+    echo "✓ Pre-commit hooks installed"
+"""
+
+[tasks.test]
+description = "Run tests with coverage"
+run = "pytest --cov --cov-report=term --cov-report=html"
+
+[tasks.test-fast]
+description = "Run tests without coverage (faster)"
+run = "pytest -x"
+
+[tasks.lint]
+description = "Run all linters"
+run = """
+    echo "Running ruff..."
+    ruff check . --fix
+    echo "Running black..."
+    black --check .
+    echo "✓ All linters passed"
+"""
+
+[tasks.format]
+description = "Auto-format code"
+run = """
+    ruff check --fix .
+    black .
+    echo "✓ Code formatted"
+"""
+
+[tasks.typecheck]
+description = "Run type checking with mypy"
+run = "mypy custom_components/hellowatt --show-error-codes --pretty"
+
+[tasks.check]
+description = "Run all checks (lint, typecheck, test)"
+depends = ["lint", "typecheck", "test"]
+
+[tasks.clean]
+description = "Clean up generated files"
+run = """
+    rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage
+    find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+    echo "✓ Cleaned up"
+"""
+
+[tasks.dev]
+description = "Setup complete development environment"
+depends = ["install", "install-hooks"]
+run = """
+    echo ""
+    echo "✓ Development environment ready!"
+    echo ""
+    echo "Available commands:"
+    echo "  mise run test        - Run tests with coverage"
+    echo "  mise run lint        - Run linters"
+    echo "  mise run format      - Auto-format code"
+    echo "  mise run typecheck   - Run type checking"
+    echo "  mise run check       - Run all checks"
+    echo ""
+"""
