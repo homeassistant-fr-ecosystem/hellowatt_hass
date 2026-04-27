@@ -8,12 +8,34 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from homeassistant import config_entries, data_entry_flow
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
 from custom_components.hellowatt.const import DOMAIN
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+async def _create_mock_config_entry(
+    hass: HomeAssistant, mock_config_entry: dict
+) -> ConfigEntry:
+    """Helper to create and add a mock config entry to Home Assistant."""
+    entry = ConfigEntry(
+        version=1,
+        minor_version=1,
+        domain=DOMAIN,
+        title=f"HelloWatt ({mock_config_entry['username']})",
+        data=mock_config_entry,
+        source=config_entries.SOURCE_USER,
+        unique_id=mock_config_entry["unique_id"],
+    )
+    await hass.config_entries.async_add(entry)
+    await hass.async_block_till_done()
+    return entry
 
 
 # ============================================================================
@@ -54,26 +76,12 @@ async def test_user_flow_success(hass: HomeAssistant) -> None:
     }
 
 
-async def test_user_flow_already_configured(hass: HomeAssistant) -> None:
+async def test_user_flow_already_configured(
+    hass: HomeAssistant, mock_config_entry
+) -> None:
     """Test config flow when integration is already configured."""
-    # Create an existing entry
-    entry = hass.config_entries.async_entry_for_domain_unique_id(
-        DOMAIN, "test@example.com"
-    )
-    if not entry:
-        hass.config_entries._entries[DOMAIN] = [
-            config_entries.ConfigEntry(
-                version=1,
-                domain=DOMAIN,
-                title="HelloWatt (test@example.com)",
-                data={
-                    CONF_USERNAME: "test@example.com",
-                    CONF_PASSWORD: "old_password",
-                },
-                source=config_entries.SOURCE_USER,
-                unique_id="test@example.com",
-            )
-        ]
+    # Create an entry directly using hass.config_entries
+    await _create_mock_config_entry(hass, mock_config_entry)
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -123,17 +131,9 @@ async def test_user_flow_normalizes_username(hass: HomeAssistant) -> None:
 
 async def test_options_flow(hass: HomeAssistant, mock_config_entry) -> None:
     """Test options flow configuration."""
-    entry = config_entries.ConfigEntry(
-        version=1,
-        domain=DOMAIN,
-        title="HelloWatt",
-        data=mock_config_entry,
-        source=config_entries.SOURCE_USER,
-        unique_id="test@example.com",
-        options={},
-    )
-
-    hass.config_entries._entries.setdefault(DOMAIN, []).append(entry)
+    entry = await _create_mock_config_entry(
+        hass, mock_config_entry
+    )  # Use the helper function
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
@@ -159,22 +159,9 @@ async def test_options_flow_with_defaults(
     hass: HomeAssistant, mock_config_entry
 ) -> None:
     """Test options flow uses default values."""
-    from custom_components.hellowatt.const import (
-        DEFAULT_LOOKBACK_DAYS,
-        DEFAULT_UPDATE_INTERVAL_HOURS,
-    )
-
-    entry = config_entries.ConfigEntry(
-        version=1,
-        domain=DOMAIN,
-        title="HelloWatt",
-        data=mock_config_entry,
-        source=config_entries.SOURCE_USER,
-        unique_id="test@example.com",
-        options={},
-    )
-
-    hass.config_entries._entries.setdefault(DOMAIN, []).append(entry)
+    entry = await _create_mock_config_entry(
+        hass, mock_config_entry
+    )  # Use the helper function
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
@@ -187,17 +174,9 @@ async def test_options_flow_validates_ranges(
     hass: HomeAssistant, mock_config_entry
 ) -> None:
     """Test options flow validates input ranges."""
-    entry = config_entries.ConfigEntry(
-        version=1,
-        domain=DOMAIN,
-        title="HelloWatt",
-        data=mock_config_entry,
-        source=config_entries.SOURCE_USER,
-        unique_id="test@example.com",
-        options={},
-    )
-
-    hass.config_entries._entries.setdefault(DOMAIN, []).append(entry)
+    entry = await _create_mock_config_entry(
+        hass, mock_config_entry
+    )  # Use the helper function
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
@@ -307,21 +286,11 @@ async def test_user_flow_timeout(hass: HomeAssistant) -> None:
 # ============================================================================
 
 
-async def test_reauth_flow_success(hass: HomeAssistant) -> None:
+async def test_reauth_flow_success(hass: HomeAssistant, mock_config_entry) -> None:
     """Test successful reauth flow."""
-    # Create an existing entry
-    entry = config_entries.ConfigEntry(
-        version=1,
-        domain=DOMAIN,
-        title="HelloWatt (test@example.com)",
-        data={
-            CONF_USERNAME: "test@example.com",
-            CONF_PASSWORD: "old_password",
-        },
-        source=config_entries.SOURCE_USER,
-        unique_id="test@example.com",
-    )
-    hass.config_entries._entries.setdefault(DOMAIN, []).append(entry)
+    entry = await _create_mock_config_entry(
+        hass, mock_config_entry
+    )  # Use the helper function
 
     # Trigger reauth
     result = await hass.config_entries.flow.async_init(
@@ -354,21 +323,13 @@ async def test_reauth_flow_success(hass: HomeAssistant) -> None:
     assert result["reason"] == "reauth_successful"
 
 
-async def test_reauth_flow_invalid_password(hass: HomeAssistant) -> None:
+async def test_reauth_flow_invalid_password(
+    hass: HomeAssistant, mock_config_entry
+) -> None:
     """Test reauth flow with invalid new password."""
-    # Create an existing entry
-    entry = config_entries.ConfigEntry(
-        version=1,
-        domain=DOMAIN,
-        title="HelloWatt (test@example.com)",
-        data={
-            CONF_USERNAME: "test@example.com",
-            CONF_PASSWORD: "old_password",
-        },
-        source=config_entries.SOURCE_USER,
-        unique_id="test@example.com",
-    )
-    hass.config_entries._entries.setdefault(DOMAIN, []).append(entry)
+    entry = await _create_mock_config_entry(
+        hass, mock_config_entry
+    )  # Use the helper function
 
     # Trigger reauth
     result = await hass.config_entries.flow.async_init(
@@ -401,23 +362,15 @@ async def test_reauth_flow_invalid_password(hass: HomeAssistant) -> None:
     assert result["errors"] == {"base": "invalid_auth"}
 
 
-async def test_reauth_flow_cannot_connect(hass: HomeAssistant) -> None:
+async def test_reauth_flow_cannot_connect(
+    hass: HomeAssistant, mock_config_entry
+) -> None:
     """Test reauth flow when cannot connect to API."""
     import aiohttp
 
-    # Create an existing entry
-    entry = config_entries.ConfigEntry(
-        version=1,
-        domain=DOMAIN,
-        title="HelloWatt (test@example.com)",
-        data={
-            CONF_USERNAME: "test@example.com",
-            CONF_PASSWORD: "old_password",
-        },
-        source=config_entries.SOURCE_USER,
-        unique_id="test@example.com",
-    )
-    hass.config_entries._entries.setdefault(DOMAIN, []).append(entry)
+    entry = await _create_mock_config_entry(
+        hass, mock_config_entry
+    )  # Use the helper function
 
     # Trigger reauth
     result = await hass.config_entries.flow.async_init(

@@ -11,8 +11,7 @@ import pytest
 from custom_components.hellowatt.client import HelloWattApiClient
 
 
-@pytest.mark.asyncio
-class TestHelloWattApiClient:
+class TestHelloWattApiClient:  # Removed @pytest.mark.asyncio
     """Test HelloWatt API client."""
 
     def test_init(self, mock_aiohttp_session):
@@ -30,12 +29,23 @@ class TestHelloWattApiClient:
 
     def test_homes_property(self, mock_hellowatt_client):
         """Test homes property returns homes list."""
-        assert len(mock_hellowatt_client.homes) == 1
+        assert len(mock_hellowatt_client.homes) == 2  # Changed from 1 to 2
         assert mock_hellowatt_client.homes[0]["id"] == "home123"
 
     def test_get_headers_without_csrf(self, mock_hellowatt_client):
         """Test getting headers without CSRF token."""
-        headers = mock_hellowatt_client._get_headers()
+        # Use a client with a session that does not have a CSRF token
+        client_no_csrf = HelloWattApiClient(
+            session=mock_hellowatt_client._session,  # use the same session mock, but need to clear csrf
+            username="test@example.com",
+            password="test_password",
+        )
+        # Manually clear csrf token from the session's cookie jar for this specific test
+        client_no_csrf._session.cookie_jar.__iter__ = Mock(
+            return_value=iter([])
+        )  # empty cookie jar
+
+        headers = client_no_csrf._get_headers()
 
         assert "User-Agent" in headers
         assert "Accept" in headers
@@ -56,6 +66,7 @@ class TestHelloWattApiClient:
 
         assert headers["x-csrftoken"] == "test_csrf_token"
 
+    @pytest.mark.asyncio  # Added
     async def test_request_with_retry_success(
         self, mock_hellowatt_client, mock_api_response_electricity
     ):
@@ -74,6 +85,7 @@ class TestHelloWattApiClient:
 
         assert result == mock_api_response_electricity
 
+    @pytest.mark.asyncio  # Added
     async def test_request_with_retry_403_reauthenticates(
         self, mock_hellowatt_client, mock_api_response_electricity
     ):
@@ -107,6 +119,7 @@ class TestHelloWattApiClient:
         mock_hellowatt_client.authenticate.assert_called_once()
         assert result == mock_api_response_electricity
 
+    @pytest.mark.asyncio  # Added
     async def test_handle_response_500_with_gas_endpoint(self, mock_hellowatt_client):
         """Test 500 error handling for gas endpoint (no contract)."""
         mock_response = AsyncMock()
@@ -118,6 +131,7 @@ class TestHelloWattApiClient:
                 mock_response, "https://example.com/api/gas", handle_500_as_no_data=True
             )
 
+    @pytest.mark.asyncio  # Added
     async def test_handle_response_error_logging(self, mock_hellowatt_client):
         """Test error response logging."""
         mock_response = AsyncMock()

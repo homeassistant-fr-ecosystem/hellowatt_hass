@@ -6,7 +6,6 @@ from datetime import timedelta
 from typing import Any
 
 import aiohttp
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -99,7 +98,8 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 data_gas = await self.client.get_daily_gas_consumption(
                     self.home_id, start_date, end_date
                 )
-            except Exception:
+            except Exception as err:
+                LOGGER.debug("Gas fetch failed (no contract or API error): %s", err)
                 data_gas = None
 
             # Fetch temperature (last year for monthly data)
@@ -141,7 +141,7 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     consumption_cost = sum(
                         v for k, v in euros_detailed.items() if k != "subscription"
                     )
-                    if consumption_cost > 0:
+                    if consumption_cost != 0:
                         result["electricity_cost_consumption"] = consumption_cost
 
                 # Extract peak/off-peak hours only if they exist (HP/HC contracts)
@@ -192,7 +192,7 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             for k, v in euros_detailed_gas.items()
                             if k != "subscription"
                         )
-                        if consumption_cost_gas > 0:
+                        if consumption_cost_gas != 0:
                             result["gas_cost_consumption"] = consumption_cost_gas
 
                     # Day before latest (typically D-2)

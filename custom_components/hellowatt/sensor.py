@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -11,12 +10,16 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfMass, UnitOfTemperature
+from homeassistant.const import (
+    EntityCategory,
+    UnitOfEnergy,
+    UnitOfMass,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import HelloWattCoordinator
@@ -52,7 +55,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "name": "Electricity Day Before",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.MEASUREMENT,
+        "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:calendar-minus",
         "suggested_display_precision": 2,
     },
@@ -60,7 +63,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "name": "Electricity Weekly",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.MEASUREMENT,
+        "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:calendar-week",
         "suggested_display_precision": 1,
     },
@@ -76,7 +79,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "name": "Gas Day Before",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.MEASUREMENT,
+        "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:fire-circle",
         "suggested_display_precision": 2,
     },
@@ -84,7 +87,7 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "name": "Gas Weekly",
         "device_class": SensorDeviceClass.ENERGY,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
-        "state_class": SensorStateClass.MEASUREMENT,
+        "state_class": SensorStateClass.TOTAL,
         "icon": "mdi:fire-alert",
         "suggested_display_precision": 1,
     },
@@ -160,6 +163,22 @@ SENSOR_TYPES: dict[str, dict[str, Any]] = {
         "icon": "mdi:cash-clock",
         "suggested_display_precision": 2,
     },
+    "contract_provider": {
+        "name": "Contract Provider",
+        "device_class": None,
+        "unit": None,
+        "state_class": None,
+        "icon": "mdi:handshake",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "contract_offer": {
+        "name": "Contract Offer",
+        "device_class": None,
+        "unit": None,
+        "state_class": None,
+        "icon": "mdi:file-certificate",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
 }
 
 
@@ -184,17 +203,9 @@ async def async_setup_entry(
 
     entities: list[HelloWattSensor] = []
 
-    # Create sensors for each PDL. Wait for the coordinator's first
-    # refresh so we can create only the sensors that actually have data
-    # (e.g. no gas sensors if there's no gas contract).
+    # Create sensors for each PDL. __init__.async_setup_entry already called
+    # async_config_entry_first_refresh, so coordinator.data is populated here.
     for pdl, coordinator in coordinators.items():
-        try:
-            await coordinator.async_config_entry_first_refresh()
-        except Exception:
-            # If the initial refresh fails, fall back to creating no sensors
-            # for this coordinator to avoid creating entities without data.
-            continue
-
         available_keys = set(coordinator.data.keys()) if coordinator.data else set()
 
         # Add only sensor types that are present in the coordinator data
@@ -245,41 +256,36 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
         # Ensure unique_id uses the PDL once so it starts with
         self._attr_unique_id: str = f"{DOMAIN}_{pdl}_{key_id}"
         self._attr_has_entity_name: bool = True
-        self._attr_device_class: SensorDeviceClass | None = sensor_config["device_class"]
+        self._attr_device_class: SensorDeviceClass | None = sensor_config[
+            "device_class"
+        ]
         self._attr_state_class: SensorStateClass | None = sensor_config["state_class"]
         self._attr_native_unit_of_measurement: str | None = sensor_config["unit"]
         self._attr_icon: str | None = sensor_config["icon"]
+        if "entity_category" in sensor_config:
+            self._attr_entity_category: EntityCategory | None = sensor_config[
+                "entity_category"
+            ]
 
         # Energy Dashboard enhancements
         if "suggested_display_precision" in sensor_config:
-            self._attr_suggested_display_precision: int = sensor_config["suggested_display_precision"]
+            self._attr_suggested_display_precision: int = sensor_config[
+                "suggested_display_precision"
+            ]
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information about this entity.
 
-        Groups all sensors for a PDL under a single device, including
-        contract information if available.
+        Groups all sensors for a PDL under a single device.
         """
-        # Get contract information from coordinator data
-        contract_provider: str | None = self.coordinator.data.get("contract_provider")
-        contract_offer: str | None = self.coordinator.data.get("contract_offer")
-
-        device_info = DeviceInfo(
+        return DeviceInfo(
             identifiers={(DOMAIN, self._pdl)},
             name=f"HelloWatt {self._pdl}",
             manufacturer="HelloWatt",
             model="Energy Monitor",
             configuration_url="https://www.hellowatt.fr/mon-compte/",
         )
-
-        # Add contract information as software version if available
-        if contract_provider or contract_offer:
-            device_info["sw_version"] = (
-                f"{contract_provider or 'Unknown'} - {contract_offer or 'Unknown'}"
-            )
-
-        return device_info
 
     @property
     def native_value(self) -> float | int | str | None:
@@ -299,20 +305,11 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
         return value if isinstance(value, (float, int, str)) else None
 
     @property
-    def last_reset(self) -> datetime | None:
-        """Return the last reset time for TOTAL_INCREASING sensors.
-
-        For Energy Dashboard compatibility, TOTAL_INCREASING sensors should
-        reset at midnight each day in the local timezone.
-        This ensures proper energy tracking and statistics.
-
-        Returns:
-            Midnight of the current day in local timezone for TOTAL_INCREASING sensors,
-            None for other sensor types
-        """
+    def last_reset(self):
+        """Return midnight of today for TOTAL_INCREASING sensors, None otherwise."""
         if self._attr_state_class == SensorStateClass.TOTAL_INCREASING:
-            # Return midnight of today in the local timezone
-            # This tells HA that the counter resets daily
+            from homeassistant.util import dt as dt_util
+
             now = dt_util.now()
             return now.replace(hour=0, minute=0, second=0, microsecond=0)
         return None

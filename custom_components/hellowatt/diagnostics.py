@@ -30,7 +30,9 @@ async def async_get_config_entry_diagnostics(
     Returns:
         Dictionary containing diagnostic information
     """
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if data is None:
+        return {"error": "Integration data not found — setup may have failed"}
 
     # Redact sensitive information
     diagnostics_data: dict[str, Any] = {
@@ -165,7 +167,9 @@ async def async_get_device_diagnostics(
     Returns:
         Dictionary containing device diagnostic information
     """
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if data is None:
+        return {"error": "Integration data not found — setup may have failed"}
     coordinators_dict = data.get("coordinators", {})
 
     # Find the PDL for this device
@@ -189,7 +193,8 @@ async def async_get_device_diagnostics(
 
     # Find entities for this device
     device_entities = [
-        e for e in er.async_entries_for_device(entity_registry, device.id)
+        e
+        for e in er.async_entries_for_device(entity_registry, device.id)
         if e.config_entry_id == entry.entry_id
     ]
 
@@ -238,7 +243,9 @@ async def async_get_device_diagnostics(
 
         if state := hass.states.get(entity.entity_id):
             entity_info["state"] = state.state
-            entity_info["unit_of_measurement"] = state.attributes.get("unit_of_measurement")
+            entity_info["unit_of_measurement"] = state.attributes.get(
+                "unit_of_measurement"
+            )
             entity_info["device_class"] = state.attributes.get("device_class")
             entity_info["state_class"] = state.attributes.get("state_class")
             entity_info["last_changed"] = state.last_changed.isoformat()

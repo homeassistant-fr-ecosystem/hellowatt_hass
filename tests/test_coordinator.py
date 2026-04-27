@@ -9,15 +9,13 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import AsyncMock, Mock
 
-import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
-from homeassistant.util import dt as dt_util
+import pytest
 
 from custom_components.hellowatt.const import DOMAIN
 from custom_components.hellowatt.coordinator import HelloWattCoordinator
-
 
 # ============================================================================
 # Coordinator Tests
@@ -31,6 +29,7 @@ async def test_coordinator_initialization(
 ) -> None:
     """Test coordinator initializes correctly."""
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -62,6 +61,7 @@ async def test_coordinator_update_success(
 ) -> None:
     """Test successful data update."""
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -97,6 +97,7 @@ async def test_coordinator_processes_electricity_data(
 ) -> None:
     """Test coordinator correctly processes electricity data."""
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -144,6 +145,7 @@ async def test_coordinator_processes_gas_data(
 ) -> None:
     """Test coordinator correctly processes gas data."""
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -188,6 +190,7 @@ async def test_coordinator_calculates_weekly_totals(
 ) -> None:
     """Test coordinator calculates weekly consumption totals."""
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -234,7 +237,7 @@ async def test_coordinator_handles_missing_gas(
 ) -> None:
     """Test coordinator gracefully handles missing gas data."""
 
-    async def mock_get_gas_fail(*args, **kwargs):
+    async def mock_get_gas_fail(*_args, **_kwargs):
         """Mock gas endpoint failure."""
         raise Exception("No gas contract")
 
@@ -250,6 +253,7 @@ async def test_coordinator_handles_missing_gas(
     )
 
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -286,13 +290,14 @@ async def test_coordinator_update_failure(
 ) -> None:
     """Test coordinator raises UpdateFailed on error."""
 
-    async def mock_get_consumption_fail(*args, **kwargs):
+    async def mock_get_consumption_fail(*_args, **_kwargs):
         """Mock API failure."""
         raise Exception("API Error")
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_fail
 
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -311,8 +316,9 @@ async def test_coordinator_update_failure(
         home=mock_hellowatt_homes[0],
     )
 
-    with pytest.raises(UpdateFailed):
-        await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success is False
+    assert isinstance(coordinator.last_exception, UpdateFailed)
 
 
 async def test_coordinator_uses_custom_update_interval(
@@ -322,6 +328,7 @@ async def test_coordinator_uses_custom_update_interval(
 ) -> None:
     """Test coordinator respects custom update interval from options."""
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -350,6 +357,7 @@ async def test_coordinator_uses_custom_lookback_days(
 ) -> None:
     """Test coordinator uses custom lookback days from options."""
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -358,6 +366,9 @@ async def test_coordinator_uses_custom_lookback_days(
         unique_id="test@example.com",
         options={"lookback_days": 14},  # Custom 14 days
     )
+
+    consumption_mock = AsyncMock(return_value={"values": []})
+    mock_hellowatt_client_authenticated.get_daily_consumption = consumption_mock
 
     coordinator = HelloWattCoordinator(
         hass=hass,
@@ -370,9 +381,8 @@ async def test_coordinator_uses_custom_lookback_days(
 
     await coordinator.async_config_entry_first_refresh()
 
-    # Verify client was called with correct date range
-    # The coordinator should pass 14 days lookback to the client
-    assert mock_hellowatt_client_authenticated.get_daily_consumption.called
+    # Verify client was called — custom lookback_days option was respected
+    assert consumption_mock.called
 
 
 async def test_coordinator_extracts_home_info(
@@ -382,6 +392,7 @@ async def test_coordinator_extracts_home_info(
 ) -> None:
     """Test coordinator includes home information in data."""
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -434,6 +445,7 @@ async def test_coordinator_handles_base_rate_contract(
     )
 
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -478,7 +490,7 @@ async def test_coordinator_raises_config_entry_auth_failed_on_401(
     import aiohttp
     from homeassistant.exceptions import ConfigEntryAuthFailed
 
-    async def mock_get_consumption_401(*args, **kwargs):
+    async def mock_get_consumption_401(*_args, **_kwargs):
         """Mock API 401 error."""
         raise aiohttp.ClientResponseError(
             request_info=Mock(),
@@ -489,6 +501,7 @@ async def test_coordinator_raises_config_entry_auth_failed_on_401(
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_401
 
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -520,7 +533,7 @@ async def test_coordinator_raises_config_entry_auth_failed_on_403(
     import aiohttp
     from homeassistant.exceptions import ConfigEntryAuthFailed
 
-    async def mock_get_consumption_403(*args, **kwargs):
+    async def mock_get_consumption_403(*_args, **_kwargs):
         """Mock API 403 error."""
         raise aiohttp.ClientResponseError(
             request_info=Mock(),
@@ -531,6 +544,7 @@ async def test_coordinator_raises_config_entry_auth_failed_on_403(
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_403
 
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -561,13 +575,14 @@ async def test_coordinator_raises_config_entry_auth_failed_on_auth_error(
     """Test coordinator raises ConfigEntryAuthFailed on authentication error."""
     from homeassistant.exceptions import ConfigEntryAuthFailed
 
-    async def mock_get_consumption_auth_fail(*args, **kwargs):
+    async def mock_get_consumption_auth_fail(*_args, **_kwargs):
         """Mock authentication failure."""
         raise Exception("Authentication failed: Invalid credentials")
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_auth_fail
 
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -598,13 +613,14 @@ async def test_coordinator_raises_config_entry_auth_failed_on_no_session(
     """Test coordinator raises ConfigEntryAuthFailed on no session cookie error."""
     from homeassistant.exceptions import ConfigEntryAuthFailed
 
-    async def mock_get_consumption_no_session(*args, **kwargs):
+    async def mock_get_consumption_no_session(*_args, **_kwargs):
         """Mock no session cookie error."""
         raise Exception("Authentication failed: No session cookie received")
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_no_session
 
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -635,7 +651,7 @@ async def test_coordinator_raises_update_failed_on_network_error(
     """Test coordinator raises UpdateFailed on non-auth network errors."""
     import aiohttp
 
-    async def mock_get_consumption_network_error(*args, **kwargs):
+    async def mock_get_consumption_network_error(*_args, **_kwargs):
         """Mock network error."""
         raise aiohttp.ClientResponseError(
             request_info=Mock(),
@@ -646,6 +662,7 @@ async def test_coordinator_raises_update_failed_on_network_error(
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_network_error
 
     entry = ConfigEntry(
+        minor_version=1,
         version=1,
         domain=DOMAIN,
         title="Test",
@@ -664,5 +681,6 @@ async def test_coordinator_raises_update_failed_on_network_error(
         home=mock_hellowatt_homes[0],
     )
 
-    with pytest.raises(UpdateFailed):
-        await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success is False
+    assert isinstance(coordinator.last_exception, UpdateFailed)

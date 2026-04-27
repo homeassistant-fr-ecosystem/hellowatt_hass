@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import aiohttp
-
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
@@ -132,38 +131,21 @@ class HelloWattConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ig
         )
 
     async def async_step_reauth(
-        self, entry_data: dict[str, Any]
+        self, _user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle reauth flow when credentials are invalid or expired.
-
-        Args:
-            entry_data: Existing config entry data
-
-        Returns:
-            FlowResult to show reauth form
-        """
+        """Handle reauthentication initiation."""
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle reauth confirmation step.
-
-        Prompts user to enter new password and validates credentials.
-
-        Args:
-            user_input: User-provided password, or None for initial form
-
-        Returns:
-            FlowResult with either a form or entry update result
-        """
+        """Handle reauthentication confirmation."""
         errors: dict[str, str] = {}
-        reauth_entry = self._get_reauth_entry()
 
         if user_input is not None:
-            username = reauth_entry.data[CONF_USERNAME]
+            entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+            username = entry.data[CONF_USERNAME]
 
-            # Validate new credentials
             success, error_key = await self._validate_credentials(
                 username, user_input[CONF_PASSWORD]
             )
@@ -171,57 +153,40 @@ class HelloWattConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ig
             if not success:
                 errors["base"] = error_key or "unknown"
             else:
-                # Update entry with new password
-                return self.async_update_reload_and_abort(
-                    reauth_entry,
-                    data={**reauth_entry.data, CONF_PASSWORD: user_input[CONF_PASSWORD]},
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    data={**entry.data, CONF_PASSWORD: user_input[CONF_PASSWORD]},
                 )
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_PASSWORD): str,
-                }
-            ),
-            description_placeholders={
-                "username": reauth_entry.data[CONF_USERNAME],
-            },
+            data_schema=vol.Schema({vol.Required(CONF_PASSWORD): str}),
             errors=errors,
         )
 
 
 class HelloWattOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle HelloWatt options flow.
-
-    Allows users to configure integration settings after initial setup,
-    such as update interval and data lookback period.
-    """
+    """Handle HelloWatt options."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow.
-
-        Args:
-            config_entry: The config entry to handle options for
-        """
+        """Initialize options flow."""
         self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle options flow initialization.
-
-        Displays a form allowing users to configure update interval
-        and data lookback period.
-
-        Args:
-            user_input: User-provided options data, or None for initial form
-
-        Returns:
-            FlowResult with either a form to display or entry update result
-        """
+        """Handle options flow."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
+
+        current_update_interval = self.config_entry.options.get(
+            CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL_HOURS
+        )
+        current_lookback_days = self.config_entry.options.get(
+            CONF_LOOKBACK_DAYS, DEFAULT_LOOKBACK_DAYS
+        )
 
         return self.async_show_form(
             step_id="init",
@@ -229,16 +194,12 @@ class HelloWattOptionsFlowHandler(config_entries.OptionsFlow):
                 {
                     vol.Optional(
                         CONF_UPDATE_INTERVAL,
-                        default=self.config_entry.options.get(
-                            CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL_HOURS
-                        ),
-                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=24)),
+                        default=current_update_interval,
+                    ): vol.All(int, vol.Range(min=1, max=24)),
                     vol.Optional(
                         CONF_LOOKBACK_DAYS,
-                        default=self.config_entry.options.get(
-                            CONF_LOOKBACK_DAYS, DEFAULT_LOOKBACK_DAYS
-                        ),
-                    ): vol.All(vol.Coerce(int), vol.Range(min=3, max=30)),
+                        default=current_lookback_days,
+                    ): vol.All(int, vol.Range(min=3, max=30)),
                 }
             ),
         )

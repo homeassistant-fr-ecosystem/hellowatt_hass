@@ -3,7 +3,7 @@
   "name": "Hellowatt",
   "codeowners": ["@homeassistant-fr-ecosystem"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["recorder"],
   "documentation": "https://github.com/homeassistant-fr-ecosystem/hellowatt_hass",
   "integration_type": "hub",
   "iot_class": "cloud_polling",

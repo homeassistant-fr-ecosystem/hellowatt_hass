@@ -351,9 +351,7 @@ class HelloWattApiClient:
                     break
 
             # Use INFO for successful authentication - important for troubleshooting
-            LOGGER.info(
-                "Authentication successful, found %d home(s)", len(self._homes)
-            )
+            LOGGER.info("Authentication successful, found %d home(s)", len(self._homes))
         finally:
             self._authenticating = False
 

@@ -16,7 +16,7 @@ from .const import API_URL, DOMAIN
 
 @callback
 def async_register(
-    hass: HomeAssistant, register: system_health.SystemHealthRegistration
+    _hass: HomeAssistant, register: system_health.SystemHealthRegistration
 ) -> None:
     """Register system health callbacks.
 
@@ -24,7 +24,7 @@ def async_register(
     to register health check callbacks for this integration.
 
     Args:
-        hass: Home Assistant instance
+        _hass: Home Assistant instance
         register: System health registration instance
     """
     register.async_register_info(async_system_health_info)

@@ -10,7 +10,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .client import HelloWattApiClient
-from .const import DOMAIN
+from .const import DOMAIN, LOGGER
 from .coordinator import HelloWattCoordinator
 from .importer import (
     SERVICE_CLEAR_SCHEMA,
@@ -51,6 +51,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {"client": client, "coordinators": {}}
 
+    if not client.homes:
+        LOGGER.warning(
+            "HelloWatt: no homes found for this account — no sensors will be created"
+        )
+
     for home in client.homes:
         pdl = home.get("enedisHome", {}).get("pdl")
         home_id = home.get("id")
@@ -64,28 +69,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register update listener for options changes
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-    # Register the services with wrapper functions
-    async def async_handle_import_historical(call):
-        """Wrapper for import historical data service."""
-        await async_import_historical_data(hass, entry, call)
+    # Register the services once
+    if not hass.services.has_service(DOMAIN, SERVICE_IMPORT_HISTORICAL):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_IMPORT_HISTORICAL,
+            lambda call: hass.async_create_task(
+                async_import_historical_data(hass, call)
+            ),
+            schema=SERVICE_IMPORT_SCHEMA,
+        )
 
-    async def async_handle_clear_statistics(call):
-        """Wrapper for clear statistics service."""
-        await async_clear_statistics(hass, entry, call)
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_IMPORT_HISTORICAL,
-        async_handle_import_historical,
-        schema=SERVICE_IMPORT_SCHEMA,
-    )
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_CLEAR_STATISTICS,
-        async_handle_clear_statistics,
-        schema=SERVICE_CLEAR_SCHEMA,
-    )
+    if not hass.services.has_service(DOMAIN, SERVICE_CLEAR_STATISTICS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CLEAR_STATISTICS,
+            lambda call: hass.async_create_task(async_clear_statistics(hass, call)),
+            schema=SERVICE_CLEAR_SCHEMA,
+        )
 
     return True
 
@@ -107,7 +108,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
         # Unregister services if no more entries
         if not hass.data[DOMAIN]:
-            hass.services.async_remove(DOMAIN, SERVICE_IMPORT_HISTORICAL)
-            hass.services.async_remove(DOMAIN, SERVICE_CLEAR_STATISTICS)
+            if hass.services.has_service(DOMAIN, SERVICE_IMPORT_HISTORICAL):
+                hass.services.async_remove(DOMAIN, SERVICE_IMPORT_HISTORICAL)
+            if hass.services.has_service(DOMAIN, SERVICE_CLEAR_STATISTICS):
+                hass.services.async_remove(DOMAIN, SERVICE_CLEAR_STATISTICS)
 
     return unload_ok

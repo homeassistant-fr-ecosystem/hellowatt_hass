@@ -129,6 +129,12 @@
       },
       "gas_cost_subscription": {
         "name": "Coût Abonnement Gaz Quotidien"
+      },
+      "contract_provider": {
+        "name": "Fournisseur du contrat"
+      },
+      "contract_offer": {
+        "name": "Offre du contrat"
       }
     }
   }

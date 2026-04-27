@@ -7,12 +7,16 @@ See: https://developers.home-assistant.io/docs/creating_integration_tests_file_s
 from __future__ import annotations
 
 from collections.abc import Generator
+from pathlib import Path
+import sys
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
-import pytest
 from homeassistant.core import HomeAssistant
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from custom_components.hellowatt.const import DOMAIN
 
@@ -20,9 +24,19 @@ from custom_components.hellowatt.const import DOMAIN
 pytest_plugins = "pytest_homeassistant_custom_component"
 
 
-# ============================================================================
-# Home Assistant Core Fixtures
-# ============================================================================
+@pytest.fixture(autouse=True)
+def enable_custom_integrations(hass, enable_custom_integrations):  # noqa: ARG001
+    """Enable custom integrations for tests."""
+    return
+
+
+@pytest.fixture(autouse=True)
+def mock_recorder(monkeypatch):
+    """Mock the recorder component to prevent it from loading."""
+    monkeypatch.setattr("homeassistant.components.recorder.Recorder", Mock())
+    monkeypatch.setattr(
+        "homeassistant.components.recorder.async_setup", AsyncMock(return_value=True)
+    )
 
 
 @pytest.fixture
@@ -31,6 +45,7 @@ def mock_config_entry() -> dict[str, Any]:
     return {
         "username": "test@example.com",
         "password": "test_password",
+        "unique_id": "test_unique_id",  # Added unique_id
     }
 
 
@@ -64,6 +79,22 @@ def mock_aiohttp_session():
     session_cookie.value = "test_session_id"
 
     session.cookie_jar.__iter__ = Mock(return_value=iter([csrf_cookie, session_cookie]))
+
+    return session
+
+
+@pytest.fixture
+def mock_aiohttp_session_no_csrf():
+    """Mock aiohttp ClientSession without CSRF token."""
+    session = Mock(spec=aiohttp.ClientSession)
+    session.cookie_jar = Mock()
+
+    # Mock cookie jar WITHOUT CSRF token
+    session_cookie = Mock()
+    session_cookie.key = "sessionid"
+    session_cookie.value = "test_session_id"
+
+    session.cookie_jar.__iter__ = Mock(return_value=iter([session_cookie]))
 
     return session
 
@@ -202,25 +233,24 @@ def mock_hellowatt_client_authenticated(
 
     async def mock_authenticate():
         """Mock authenticate method."""
-        pass
 
-    async def mock_get_daily_consumption(*args, **kwargs):
+    async def mock_get_daily_consumption(*_args, **_kwargs):
         """Mock electricity consumption."""
         return mock_api_response_electricity
 
-    async def mock_get_daily_gas_consumption(*args, **kwargs):
+    async def mock_get_daily_gas_consumption(*_args, **_kwargs):
         """Mock gas consumption."""
         return mock_api_response_gas
 
-    async def mock_get_yearly_temperature(*args, **kwargs):
+    async def mock_get_yearly_temperature(*_args, **_kwargs):
         """Mock temperature."""
         return mock_api_response_temperature
 
-    async def mock_get_contracts(*args, **kwargs):
+    async def mock_get_contracts(*_args, **_kwargs):
         """Mock contracts."""
         return mock_api_response_contracts
 
-    async def mock_get_homes(*args, **kwargs):
+    async def mock_get_homes(*_args, **_kwargs):
         """Mock homes list."""
         return mock_hellowatt_client._homes
 
@@ -277,15 +307,13 @@ def mock_coordinator_data() -> dict[str, Any]:
 @pytest.fixture
 async def setup_integration(
     hass: HomeAssistant,
-    mock_config_entry,
+    _mock_config_entry,
 ) -> Generator[None, None, None]:
     """Set up the HelloWatt integration for testing."""
     from homeassistant.setup import async_setup_component
 
     # Mock the client creation
-    with patch(
-        "custom_components.hellowatt.HelloWattApiClient"
-    ) as mock_client_class:
+    with patch("custom_components.hellowatt.HelloWattApiClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client.homes = [
             {
@@ -297,16 +325,42 @@ async def setup_integration(
         ]
         mock_client.authenticate = AsyncMock()
         mock_client.get_daily_consumption = AsyncMock(
-            return_value={"values": [{"datetime": "2024-01-01T00:00:00Z", "kwhDetailed": {"HP": 10, "HC": 5}, "valueCo2": 1.0, "eurosDetailed": {"HP": 1.5, "HC": 0.5, "subscription": 0.3}}]}
+            return_value={
+                "values": [
+                    {
+                        "datetime": "2024-01-01T00:00:00Z",
+                        "kwhDetailed": {"HP": 10, "HC": 5},
+                        "valueCo2": 1.0,
+                        "eurosDetailed": {"HP": 1.5, "HC": 0.5, "subscription": 0.3},
+                    }
+                ]
+            }
         )
         mock_client.get_daily_gas_consumption = AsyncMock(
-            return_value={"values": [{"datetime": "2024-01-01T00:00:00Z", "kwhDetailed": {"total": 20}, "valueCo2": 2.0, "eurosDetailed": {"consumption": 4.0, "subscription": 0.5}}]}
+            return_value={
+                "values": [
+                    {
+                        "datetime": "2024-01-01T00:00:00Z",
+                        "kwhDetailed": {"total": 20},
+                        "valueCo2": 2.0,
+                        "eurosDetailed": {"consumption": 4.0, "subscription": 0.5},
+                    }
+                ]
+            }
         )
         mock_client.get_yearly_temperature = AsyncMock(
-            return_value={"values": [{"datetime": "2024-01-01T00:00:00Z", "valueCelsius": 15}]}
+            return_value={
+                "values": [{"datetime": "2024-01-01T00:00:00Z", "valueCelsius": 15}]
+            }
         )
         mock_client.get_contracts = AsyncMock(
-            return_value=[{"contractState": "actual", "provider": {"name": "EDF"}, "offer": {"name": "Tarif Bleu"}}]
+            return_value=[
+                {
+                    "contractState": "actual",
+                    "provider": {"name": "EDF"},
+                    "offer": {"name": "Tarif Bleu"},
+                }
+            ]
         )
 
         mock_client_class.return_value = mock_client
