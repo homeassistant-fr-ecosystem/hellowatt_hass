@@ -234,7 +234,7 @@ async def test_sensor_initialization(
     assert sensor._attr_name == "Electricity Daily"
     assert sensor._attr_unique_id == "hellowatt_12345678901234_electricity"
     assert sensor._attr_device_class == SensorDeviceClass.ENERGY
-    assert sensor._attr_state_class == SensorStateClass.TOTAL
+    assert sensor._attr_state_class == SensorStateClass.TOTAL_INCREASING
     assert sensor._attr_native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
 
 
@@ -425,7 +425,7 @@ async def test_sensor_last_reset_for_total_increasing(
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
 ) -> None:
-    """Test last_reset property for TOTAL_INCREASING sensors (e.g. CO2 emissions)."""
+    """Test last_reset property for TOTAL_INCREASING sensors."""
     entry = ConfigEntry(
         minor_version=1,
         version=1,
@@ -446,11 +446,11 @@ async def test_sensor_last_reset_for_total_increasing(
         home=mock_hellowatt_homes[0],
     )
 
-    coordinator.data = {"electricity_co2": 1.234}
+    coordinator.data = {"electricity": 15.7}
 
-    sensor_config = SENSOR_TYPES["electricity_co2"]
+    sensor_config = SENSOR_TYPES["electricity"]
     sensor = HelloWattSensor(
-        coordinator, "12345678901234", "electricity_co2", sensor_config
+        coordinator, "12345678901234", "electricity", sensor_config
     )
 
     # TOTAL_INCREASING sensors should have last_reset at midnight
