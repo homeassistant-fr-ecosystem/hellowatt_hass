@@ -22,9 +22,9 @@
       "cannot_connect": "Failed to connect to HelloWatt API",
       "invalid_auth": "Invalid email or password",
       "invalid_pdl": "Invalid PDL number",
-      "api_error": "API communication error",
-      "timeout": "Connection timeout",
-      "unknown": "Unexpected error occurred"
+      "api_error": "Communication error with the API",
+      "timeout": "Timeout reached",
+      "unknown": "Unexpected error"
     },
     "abort": {
       "already_configured": "This account is already configured",
@@ -38,7 +38,7 @@
         "description": "Configure HelloWatt integration settings.",
         "data": {
           "update_interval": "Update Interval (hours)",
-          "lookback_days": "Data Lookback Period (days)"
+          "lookback_days": "Data recovery period (days)"
         },
         "data_description": {
           "update_interval": "How often to fetch new data from HelloWatt API (1-24 hours)",
@@ -129,6 +129,12 @@
       },
       "gas_cost_subscription": {
         "name": "Gas Cost Subscription Daily"
+      },
+      "contract_provider": {
+        "name": "Contract Provider"
+      },
+      "contract_offer": {
+        "name": "Contract Offer"
       }
     }
   }

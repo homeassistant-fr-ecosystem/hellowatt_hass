@@ -70,7 +70,6 @@ async def _import_statistics(
     values = data.get("values", [])
     if not values:
         return 0
-
     # Prepare statistics for each sensor type
     statistics: dict[str, list[StatisticData]] = {
         energy_type: [],  # Daily total
@@ -118,8 +117,6 @@ async def _import_statistics(
         except Exception:
             continue
 
-        endDt = dt.replace(hour=23, minute=59, second=59)
-
         kwh_detailed = day_data.get("kwhDetailed", {})
         total_kwh = sum(kwh_detailed.values())
 
@@ -140,12 +137,10 @@ async def _import_statistics(
         statistics[energy_type].append(
             StatisticData(
                 start=dt,
-                end=endDt,
                 state=total_kwh_clamped,
                 sum=cumulative_sums[energy_type],
             )
         )
-
         # Add CO2 if available
         if "valueCo2" in day_data:
             val_co2 = day_data["valueCo2"]
@@ -163,7 +158,6 @@ async def _import_statistics(
             statistics[f"{energy_type}_co2"].append(
                 StatisticData(
                     start=dt,
-                    end=endDt,
                     state=val_co2_clamped,
                     sum=cumulative_sums[f"{energy_type}_co2"],
                 )
@@ -187,7 +181,6 @@ async def _import_statistics(
             statistics[f"{energy_type}_cost"].append(
                 StatisticData(
                     start=dt,
-                    end=endDt,
                     state=total_cost_clamped,
                     sum=cumulative_sums[f"{energy_type}_cost"],
                 )
@@ -212,7 +205,6 @@ async def _import_statistics(
                 statistics[f"{energy_type}_cost_subscription"].append(
                     StatisticData(
                         start=dt,
-                        end=endDt,
                         state=subscription_cost_clamped,
                         sum=cumulative_sums[f"{energy_type}_cost_subscription"],
                     )
@@ -239,7 +231,6 @@ async def _import_statistics(
                 statistics[f"{energy_type}_cost_consumption"].append(
                     StatisticData(
                         start=dt,
-                        end=endDt,
                         state=consumption_cost_clamped,
                         sum=cumulative_sums[f"{energy_type}_cost_consumption"],
                     )
@@ -263,7 +254,6 @@ async def _import_statistics(
                 statistics[f"{energy_type}_peak"].append(
                     StatisticData(
                         start=dt,
-                        end=endDt,
                         state=val_hp_clamped,
                         sum=cumulative_sums[f"{energy_type}_peak"],
                     )
@@ -284,7 +274,6 @@ async def _import_statistics(
                 statistics[f"{energy_type}_off_peak"].append(
                     StatisticData(
                         start=dt,
-                        end=endDt,
                         state=val_hc_clamped,
                         sum=cumulative_sums[f"{energy_type}_off_peak"],
                     )
@@ -348,22 +337,13 @@ async def _import_statistics(
             )
 
         try:
-            # Use async_import_statistics which properly handles existing metadata
-            # and avoids UNIQUE constraint errors
-            result = async_import_statistics(hass, metadata, stats_data)
-
-            if result:
-                sensors_imported += 1
-                LOGGER.debug(
-                    "Imported %d statistics for %s",
-                    len(stats_data),
-                    statistic_id,
-                )
-            else:
-                LOGGER.debug(
-                    "No new statistics imported for %s (may already exist)",
-                    statistic_id,
-                )
+            async_import_statistics(hass, metadata, stats_data)
+            sensors_imported += 1
+            LOGGER.debug(
+                "Imported %d statistics for %s",
+                len(stats_data),
+                statistic_id,
+            )
         except Exception as err:
             # Log at warning level so user can see the issue
             LOGGER.warning(
@@ -374,6 +354,93 @@ async def _import_statistics(
             LOGGER.debug("Full traceback: %s", traceback.format_exc())
 
     return sensors_imported
+
+
+async def _fetch_with_retry(fetch_coro_factory, max_retries: int = 3, base_delay: float = 5.0):
+    """Call fetch_coro_factory() and retry on transient 5xx errors with exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            return await fetch_coro_factory()
+        except Exception as err:
+            err_str = str(err)
+            # Retry only on 5xx / gateway / server errors
+            is_transient = any(
+                code in err_str for code in ("502", "503", "504", "500", "Bad Gateway", "Service Unavailable")
+            )
+            if is_transient and attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)
+                LOGGER.warning(
+                    "Transient API error (attempt %d/%d): %s — retrying in %.0fs",
+                    attempt + 1,
+                    max_retries,
+                    err_str,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
+
+
+async def _load_existing_sums(hass: HomeAssistant, pdl: str, start_date) -> dict[str, float]:
+    """Return the cumulative sum at the last statistics point strictly before start_date.
+
+    Using the sum at the boundary just before the import window ensures that a
+    partial re-import adds new points with the correct running total instead of
+    restarting from zero or jumping to the global last value.
+    """
+    from homeassistant.components.recorder import get_instance
+    from homeassistant.components.recorder.statistics import statistics_during_period
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.const import Platform
+
+    registry = er.async_get(hass)
+    instance = get_instance(hass)
+
+    sensor_keys = [
+        "electricity",
+        "electricity_co2", "electricity_cost",
+        "electricity_cost_consumption", "electricity_cost_subscription",
+        "electricity_peak", "electricity_off_peak",
+        "gas",
+        "gas_co2", "gas_cost",
+        "gas_cost_consumption", "gas_cost_subscription",
+    ]
+
+    tz = zoneinfo.ZoneInfo("Europe/Paris")
+    # End of the day before start_date — last point we must not overwrite
+    end_time = datetime.combine(start_date, time(0, 0, 0), tzinfo=tz) - timedelta(seconds=1)
+
+    sums: dict[str, float] = {}
+    for sensor_key in sensor_keys:
+        unique_id = f"{DOMAIN}_{pdl}_{sensor_key}"
+        entity_id = registry.async_get_entity_id(Platform.SENSOR, DOMAIN, unique_id)
+        if not entity_id:
+            continue
+
+        # Fetch the last daily bucket ending just before start_date.
+        # We pass start_time far in the past so we always get at least one row.
+        result = await instance.async_add_executor_job(
+            statistics_during_period,
+            hass,
+            datetime(2000, 1, 1, tzinfo=zoneinfo.ZoneInfo("UTC")),
+            end_time,
+            {entity_id},
+            "day",
+            None,
+            {"sum"},
+        )
+        if result and entity_id in result and result[entity_id]:
+            last_sum = result[entity_id][-1].get("sum")
+            if last_sum is not None:
+                sums[sensor_key] = last_sum
+                LOGGER.debug(
+                    "Seeding cumulative sum for %s before %s: %.3f",
+                    sensor_key,
+                    start_date,
+                    last_sum,
+                )
+
+    return sums
 
 
 async def async_import_historical_data(hass: HomeAssistant, call: ServiceCall) -> None:
@@ -436,8 +503,9 @@ async def async_import_historical_data(hass: HomeAssistant, call: ServiceCall) -
                 current_start = start_date
                 total_months = 0
 
-                # Initialize cumulative sums for this PDL to persist across months
-                pdl_cumulative_sums: dict[str, float] = {}
+                # Initialize cumulative sums from existing statistics so a
+                # partial re-import does not reset the running totals.
+                pdl_cumulative_sums = await _load_existing_sums(hass, pdl, start_date)
 
                 while current_start <= end_date:
                     # Calculate end of current month
@@ -460,8 +528,8 @@ async def async_import_historical_data(hass: HomeAssistant, call: ServiceCall) -
 
                     try:
                         # Fetch electricity data for this month
-                        electricity_data = await client.get_daily_consumption(
-                            home_id, start_datetime, end_datetime
+                        electricity_data = await _fetch_with_retry(
+                            lambda s=start_datetime, e=end_datetime: client.get_daily_consumption(home_id, s, e)
                         )
 
                         # Log data received for debugging
@@ -501,8 +569,8 @@ async def async_import_historical_data(hass: HomeAssistant, call: ServiceCall) -
                     try:
                         # Fetch gas data for this month if available
                         if hasattr(client, "get_daily_gas_consumption"):
-                            gas_data = await client.get_daily_gas_consumption(
-                                home_id, start_datetime, end_datetime
+                            gas_data = await _fetch_with_retry(
+                                lambda s=start_datetime, e=end_datetime: client.get_daily_gas_consumption(home_id, s, e)
                             )
 
                             # Import gas statistics
@@ -563,10 +631,10 @@ async def async_import_historical_data(hass: HomeAssistant, call: ServiceCall) -
 async def async_clear_statistics(hass: HomeAssistant, call: ServiceCall) -> None:
     """Handle the clear statistics service call."""
     from homeassistant.components.recorder import get_instance
+    from homeassistant.components.recorder.statistics import list_statistic_ids
 
     target_pdl = call.data.get("pdl")
 
-    # Reduce verbosity
     LOGGER.info("Starting statistics cleanup for PDL: %s", target_pdl or "ALL")
 
     if DOMAIN not in hass.data:
@@ -577,7 +645,6 @@ async def async_clear_statistics(hass: HomeAssistant, call: ServiceCall) -> None
     pdls_to_clear = []
     for _entry_id, entry_data in hass.data[DOMAIN].items():
         coordinators_dict = entry_data["coordinators"]
-
         if target_pdl:
             if target_pdl in coordinators_dict:
                 pdls_to_clear.append(target_pdl)
@@ -588,88 +655,31 @@ async def async_clear_statistics(hass: HomeAssistant, call: ServiceCall) -> None
         LOGGER.info("No statistics found to clear for PDL(s): %s", target_pdl or "all")
         return
 
-    # Clear statistics data and metadata using recorder session
-    def _clear_statistics_with_metadata():
-        """Clear statistics and metadata in a recorder session."""
-        from homeassistant.components.recorder.util import session_scope
-        from sqlalchemy import delete, or_
+    instance = get_instance(hass)
 
-        try:
-            from homeassistant.components.recorder.db_schema import (
-                Statistics,
-                StatisticsMeta,
-                StatisticsShortTerm,
-            )
-        except ImportError:
-            from homeassistant.components.recorder.models import (
-                Statistics,
-                StatisticsMeta,
-                StatisticsShortTerm,
-            )
-
-        with session_scope(hass=hass, read_only=False) as session:
-            filters = []
-            for pdl in pdls_to_clear:
-                filters.append(StatisticsMeta.statistic_id.like(f"sensor.%{pdl}%"))
-                filters.append(StatisticsMeta.statistic_id.like(f"{DOMAIN}:{pdl}%"))
-                filters.append(StatisticsMeta.statistic_id.like(f"%{pdl}%"))
-
-            if not filters:
-                return 0
-
-            all_metadata = session.query(StatisticsMeta).filter(or_(*filters)).all()
-
-            metadata_ids_to_delete = []
-            stats_found = []
-
-            for meta in all_metadata:
-                stat_id = meta.statistic_id
-                should_delete = False
-                for pdl in pdls_to_clear:
-                    if pdl in stat_id and (
-                        DOMAIN in stat_id or f"sensor.hellowatt_{pdl}" in stat_id
-                    ):
-                        should_delete = True
-                        break
-
-                if should_delete:
-                    metadata_ids_to_delete.append(meta.id)
-                    stats_found.append(stat_id)
-
-            if metadata_ids_to_delete:
-                # Delete statistics data first
-                session.execute(
-                    delete(Statistics).where(
-                        Statistics.metadata_id.in_(metadata_ids_to_delete)
-                    )
-                )
-
-                session.execute(
-                    delete(StatisticsShortTerm).where(
-                        StatisticsShortTerm.metadata_id.in_(metadata_ids_to_delete)
-                    )
-                )
-
-                # Then delete metadata
-                deleted_meta = session.execute(
-                    delete(StatisticsMeta).where(
-                        StatisticsMeta.id.in_(metadata_ids_to_delete)
-                    )
-                ).rowcount
-
-                session.commit()
-                return deleted_meta
-
-            return 0
-
-    deleted_count = await get_instance(hass).async_add_executor_job(
-        _clear_statistics_with_metadata
+    # list_statistic_ids is synchronous — run in executor
+    all_statistic_ids = await instance.async_add_executor_job(
+        list_statistic_ids, hass
     )
 
-    if deleted_count > 0:
-        LOGGER.info(
-            "Statistics cleared (%d entries). Restart Home Assistant to update Energy Dashboard.",
-            deleted_count,
+    ids_to_delete = [
+        s["statistic_id"]
+        for s in all_statistic_ids
+        if any(
+            pdl in s["statistic_id"]
+            and (DOMAIN in s["statistic_id"] or f"sensor.hellowatt_{pdl}" in s["statistic_id"])
+            for pdl in pdls_to_clear
         )
-    else:
+    ]
+
+    if not ids_to_delete:
         LOGGER.info("No statistics found to clear for PDL(s): %s", target_pdl or "all")
+        return
+
+    # Use instance.async_clear_statistics — queues the task on the recorder thread
+    instance.async_clear_statistics(ids_to_delete)
+    LOGGER.info(
+        "Statistics cleared (%d entries): %s. Restart Home Assistant to update Energy Dashboard.",
+        len(ids_to_delete),
+        ids_to_delete,
+    )
