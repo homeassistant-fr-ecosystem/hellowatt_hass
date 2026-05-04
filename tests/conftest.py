@@ -6,19 +6,22 @@ See: https://developers.home-assistant.io/docs/creating_integration_tests_file_s
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Generator
 from pathlib import Path
-import sys
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
-from homeassistant.core import HomeAssistant
 import pytest
+from homeassistant.config_entries import ConfigEntryState, current_entry
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from custom_components.hellowatt.const import DOMAIN
+from custom_components.hellowatt.coordinator import HelloWattCoordinator
 
 # Import pytest plugins from Home Assistant
 pytest_plugins = "pytest_homeassistant_custom_component"
@@ -297,6 +300,44 @@ def mock_coordinator_data() -> dict[str, Any]:
         "city": "Paris",
         "pdl": "12345678901234",
     }
+
+
+@pytest.fixture
+def make_coordinator(hass: HomeAssistant):
+    """Factory fixture to create a HelloWattCoordinator with config entry context set."""
+
+    def _make(
+        client,
+        home,
+        *,
+        pdl: str = "12345678901234",
+        home_id: str = "home123",
+        options: dict | None = None,
+    ) -> HelloWattCoordinator:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="Test",
+            data={"username": "test@example.com", "password": "test"},
+            unique_id="test@example.com",
+            options=options or {},
+        )
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
+        token = current_entry.set(entry)
+        try:
+            coordinator = HelloWattCoordinator(
+                hass=hass,
+                client=client,
+                entry=entry,
+                pdl=pdl,
+                home_id=home_id,
+                home=home,
+            )
+        finally:
+            current_entry.reset(token)
+        return coordinator
+
+    return _make
 
 
 # ============================================================================

@@ -62,6 +62,15 @@ This integration is not yet available in HACS. Follow the manual installation st
 
 The integration will automatically discover all homes (PDLs) associated with your account and create sensors for each.
 
+### Options
+
+After the integration is set up, click **Configure** on the HelloWatt integration card to adjust:
+
+| Option | Default | Range | Description |
+|--------|---------|-------|-------------|
+| Update Interval | 1 hour | 1–24 hours | How often to poll the HelloWatt API |
+| Data Recovery Period | 7 days | 3–30 days | How many days of data to fetch per update — increasing this helps recover missed updates |
+
 ## Sensors
 
 The integration creates the following sensors for each PDL (Point de Livraison):
@@ -69,11 +78,11 @@ The integration creates the following sensors for each PDL (Point de Livraison):
 ### Electricity Sensors
 | Sensor | Description | Unit | State Class |
 |--------|-------------|------|-------------|
-| `sensor.electricity_daily` | Today's electricity consumption | kWh | total_increasing |
-| `sensor.electricity_peak_hours_daily` | Peak hours consumption (HP contracts) | kWh | total_increasing |
-| `sensor.electricity_off_peak_hours_daily` | Off-peak hours consumption (HC contracts) | kWh | total_increasing |
-| `sensor.electricity_day_before` | Yesterday's consumption | kWh | total_increasing |
-| `sensor.electricity_weekly` | Last 7 days consumption | kWh | total_increasing |
+| `sensor.electricity_daily` | Today's electricity consumption | kWh | total |
+| `sensor.electricity_peak_hours_daily` | Peak hours consumption (HP contracts) | kWh | total |
+| `sensor.electricity_off_peak_hours_daily` | Off-peak hours consumption (HC contracts) | kWh | total |
+| `sensor.electricity_day_before` | Yesterday's consumption | kWh | total |
+| `sensor.electricity_weekly` | Last 7 days consumption | kWh | total |
 | `sensor.electricity_co2_emissions_daily` | Daily CO2 emissions | kg | total_increasing |
 | `sensor.electricity_cost_daily` | Total daily electricity cost | EUR | total |
 | `sensor.electricity_cost_consumption_daily` | Consumption cost only | EUR | total |
@@ -82,9 +91,9 @@ The integration creates the following sensors for each PDL (Point de Livraison):
 ### Gas Sensors
 | Sensor | Description | Unit | State Class |
 |--------|-------------|------|-------------|
-| `sensor.gas_daily` | Today's gas consumption | kWh | total_increasing |
-| `sensor.gas_day_before` | Yesterday's consumption | kWh | total_increasing |
-| `sensor.gas_weekly` | Last 7 days consumption | kWh | total_increasing |
+| `sensor.gas_daily` | Today's gas consumption | kWh | total |
+| `sensor.gas_day_before` | Yesterday's consumption | kWh | total |
+| `sensor.gas_weekly` | Last 7 days consumption | kWh | total |
 | `sensor.gas_co2_emissions_daily` | Daily CO2 emissions | kg | total_increasing |
 | `sensor.gas_cost_daily` | Total daily gas cost | EUR | total |
 | `sensor.gas_cost_consumption_daily` | Consumption cost only | EUR | total |
@@ -94,6 +103,15 @@ The integration creates the following sensors for each PDL (Point de Livraison):
 | Sensor | Description | Unit | State Class |
 |--------|-------------|------|-------------|
 | `sensor.temperature` | Current temperature | °C | measurement |
+
+### Diagnostic Sensors
+
+| Sensor | Description | Unit | State Class |
+|--------|-------------|------|-------------|
+| `sensor.contract_provider` | Energy contract provider name | — | — |
+| `sensor.contract_offer` | Energy contract offer name | — | — |
+
+These sensors are in the **Diagnostic** entity category and are hidden by default in the Home Assistant UI. They reflect the active contract data fetched from HelloWatt.
 
 ## Services
 
@@ -121,6 +139,25 @@ data:
 - Historical data is imported into Home Assistant's statistics database
 - Supports both electricity and gas data where available
 
+### hellowatt.clear_statistics
+
+Clear all HelloWatt statistics from the Home Assistant database. Use this before re-importing data to avoid conflicts with old metadata.
+
+**Parameters:**
+- `pdl` (optional): Specific PDL to clear statistics for, leave empty to clear all PDLs
+
+**Example:**
+```yaml
+service: hellowatt.clear_statistics
+data:
+  pdl: "12345678901234"
+```
+
+**Notes:**
+- Restart Home Assistant after clearing to refresh the Energy Dashboard
+- This removes only historical statistics records — sensor entities are not deleted
+- Use in combination with `import_historical_data` when you need to re-import a date range from scratch
+
 ## Data Update
 
 - The integration polls the HelloWatt API every hour
@@ -144,8 +181,6 @@ Main integration setup and historical data import service:
 - Entry setup and teardown
 - API client initialization with cookie-based session management
 - Multi-PDL coordinator creation
-- Historical data import service registration
-- Statistics import functionality
 
 #### [client.py](custom_components/hellowatt/client.py)
 HelloWatt API client:
@@ -169,6 +204,24 @@ Sensor platform implementation:
 - Device grouping by PDL
 - Support for energy, cost, and CO2 sensors
 - Proper Home Assistant entity configuration
+
+#### [importer.py](custom_components/hellowatt/importer.py)
+Historical data import and statistics management:
+- `import_historical_data` and `clear_statistics` service handlers
+- Monthly chunked import with retry logic (exponential backoff on 5xx errors)
+- Cumulative sum seeding so partial re-imports don't reset running totals
+- Negative value clamping for data quality
+
+#### [diagnostics.py](custom_components/hellowatt/diagnostics.py)
+Home Assistant diagnostics support:
+- Config-entry diagnostics: coordinator status, available sensor keys, HP/HC detection, entity states
+- Per-device diagnostics: all current sensor values for a specific PDL
+- Access via Settings > Devices & Services > HelloWatt > three-dot menu > Download Diagnostics
+
+#### [system_health.py](custom_components/hellowatt/system_health.py)
+System health reporting visible in Settings > System > System Information:
+- API endpoint reachability check
+- Number of configured accounts and total PDL coordinators
 
 #### [config_flow.py](custom_components/hellowatt/config_flow.py)
 Configuration flow:
@@ -219,15 +272,18 @@ The integration communicates with the HelloWatt API:
 ### File Structure
 ```
 custom_components/hellowatt/
-├── __init__.py           # Integration setup and services
+├── __init__.py           # Integration setup and service registration
 ├── client.py             # API client
-├── config_flow.py        # Configuration UI
+├── config_flow.py        # Configuration UI and options flow
 ├── const.py              # Constants
 ├── coordinator.py        # Data update coordinator
+├── diagnostics.py        # HA diagnostics support
+├── importer.py           # Historical data import & statistics management
 ├── manifest.json         # Integration metadata
 ├── sensor.py             # Sensor entities
 ├── services.yaml         # Service definitions
-└── strings.json          # UI strings
+├── strings.json          # UI strings
+└── system_health.py      # System health reporting
 ```
 
 ### Key Design Patterns

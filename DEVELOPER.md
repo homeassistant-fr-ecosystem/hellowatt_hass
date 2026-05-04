@@ -105,12 +105,12 @@ session = async_create_clientsession(
     "gas_cost_consumption": float,     # EUR
     "gas_cost_subscription": float,    # EUR
     "temperature": float,              # °C
-    "contract_provider": str,
-    "contract_offer": str,
-    "address": str,
-    "postal_code": str,
-    "city": str,
-    "pdl": str
+    "contract_provider": str,          # active contract provider name (e.g. "EDF")
+    "contract_offer": str,             # active contract offer name (e.g. "Tarif Bleu")
+    "address": str,                    # home street address
+    "postal_code": str,                # home postal code
+    "city": str,                       # home city name
+    "pdl": str,                        # PDL identifier (mirrors the coordinator key)
 }
 ```
 
@@ -136,6 +136,46 @@ session = async_create_clientsession(
 - `available`: Checks if sensor data exists in coordinator
 
 **Unique ID Format**: `hellowatt_{pdl}_{sensor_key}`
+
+### importer.py
+
+**Location**: [importer.py](custom_components/hellowatt/importer.py)
+
+**Purpose**: All historical data import and statistics management — extracted from `__init__.py` to keep the entry module focused on setup.
+
+**Key functions**:
+- `async_import_historical_data(hass, call)`: Service handler. Validates and adjusts date range (limits to D-2), loads existing cumulative sums at the boundary, then iterates month-by-month calling `_import_statistics()` for electricity and gas.
+- `async_clear_statistics(hass, call)`: Service handler. Lists all statistic IDs matching the PDL(s) and removes them via the recorder instance.
+- `async _import_statistics(hass, pdl, energy_type, data, cumulative_sums=None) -> int`: Converts API `values` list to `StatisticData` objects for energy, CO2, cost, subscription, consumption, and HP/HC sensors. Clamps all negative values to 0 before accumulation.
+- `_fetch_with_retry(fetch_coro_factory, max_retries=3, base_delay=5.0)`: Wraps any coroutine factory with up to 3 retries and exponential backoff (5s, 10s, 20s) on 5xx / gateway errors.
+- `_load_existing_sums(hass, pdl, start_date)`: Queries the recorder for the last cumulative sum per sensor key strictly before `start_date`, so a partial re-import continues from the correct running total instead of restarting from zero.
+
+**Service names**:
+- `SERVICE_IMPORT_HISTORICAL = "import_historical_data"`
+- `SERVICE_CLEAR_STATISTICS = "clear_statistics"`
+
+### diagnostics.py
+
+**Location**: [diagnostics.py](custom_components/hellowatt/diagnostics.py)
+
+**Purpose**: Integration diagnostics for troubleshooting, conforming to the [HA diagnostics spec](https://developers.home-assistant.io/docs/core/integration_diagnostics).
+
+**Functions**:
+- `async_get_config_entry_diagnostics(hass, entry)`: Returns entry metadata (title, unique_id, state), current options, per-PDL coordinator status (home_id, update interval, last update time, available sensor keys, HP/HC detection), all entity states and attributes, and device info. Credentials are never included.
+- `async_get_device_diagnostics(hass, entry, device)`: Returns coordinator and entity data scoped to a single PDL device. Includes all current sensor values.
+
+**Access**: Settings > Devices & Services > HelloWatt > three-dot menu > **Download Diagnostics**
+
+### system_health.py
+
+**Location**: [system_health.py](custom_components/hellowatt/system_health.py)
+
+**Purpose**: System health reporting conforming to the [HA system health spec](https://developers.home-assistant.io/docs/core/integration-system-health).
+
+**Exposes** (visible in Settings > System > System Information):
+- `api_endpoint_reachable`: whether `https://www.hellowatt.fr/api` is reachable
+- `configured_accounts`: number of config entries loaded
+- `total_pdl_coordinators`: total PDL coordinators across all entries
 
 ## API Endpoints
 
@@ -251,7 +291,7 @@ GET /homes/{home_id}/contracts
 
 ### Service Implementation
 
-**Location**: [\_\_init\_\_.py:224](custom_components/hellowatt/__init__.py#L224)
+**Location**: [importer.py](custom_components/hellowatt/importer.py)
 
 **Service Name**: `hellowatt.import_historical_data`
 
@@ -267,7 +307,7 @@ GET /homes/{home_id}/contracts
 
 ### Statistics Import
 
-**Function**: `_import_statistics()` at [\_\_init\_\_.py:34](custom_components/hellowatt/__init__.py#L34)
+**Function**: `_import_statistics()` in [importer.py](custom_components/hellowatt/importer.py)
 
 **Purpose**: Converts API data to Home Assistant statistics format
 
@@ -295,6 +335,17 @@ GET /homes/{home_id}/contracts
 - Energy sensors: unit = "kWh", has_sum = True
 - CO2 sensors: unit = "kg", has_sum = True
 - Cost sensors: unit = "EUR", has_sum = True
+
+### Statistics Clearing
+
+**Service Name**: `hellowatt.clear_statistics`
+
+**Processing Flow**:
+1. Collect all PDL identifiers to clear (filtered by `pdl` parameter if provided)
+2. Call `list_statistic_ids()` via the recorder executor to find all matching statistic IDs
+3. Filter IDs that contain both the PDL string and the domain (`hellowatt`) or `sensor.hellowatt_{pdl}`
+4. Call `instance.async_clear_statistics(ids_to_delete)` — queues the task on the recorder thread
+5. Log the cleared IDs; user must restart HA to see the Energy Dashboard updated
 
 ## Configuration Flow
 

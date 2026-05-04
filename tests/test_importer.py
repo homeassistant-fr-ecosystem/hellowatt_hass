@@ -51,9 +51,9 @@ async def test_import_statistics_base_tariff_no_peak_off_peak_imported(
         )
 
     peak_calls = [s for s in captured_calls if "peak" in s]
-    assert (
-        peak_calls == []
-    ), f"Base-tariff import must not produce peak/off_peak statistics, got: {peak_calls}"
+    assert peak_calls == [], (
+        f"Base-tariff import must not produce peak/off_peak statistics, got: {peak_calls}"
+    )
 
 
 async def test_import_statistics_hphc_tariff_imports_peak_off_peak(
@@ -96,12 +96,12 @@ async def test_import_statistics_hphc_tariff_imports_peak_off_peak(
             data=mock_api_response_electricity,
         )
 
-    assert any(
-        "_peak" in s and "off" not in s for s in captured_calls
-    ), f"Expected electricity_peak in imported statistics, got: {captured_calls}"
-    assert any(
-        "off_peak" in s for s in captured_calls
-    ), f"Expected electricity_off_peak in imported statistics, got: {captured_calls}"
+    assert any("_peak" in s and "off" not in s for s in captured_calls), (
+        f"Expected electricity_peak in imported statistics, got: {captured_calls}"
+    )
+    assert any("off_peak" in s for s in captured_calls), (
+        f"Expected electricity_off_peak in imported statistics, got: {captured_calls}"
+    )
 
 
 async def test_import_statistics_base_tariff_cumulative_sums_no_peak_keys(
@@ -140,6 +140,6 @@ async def test_import_statistics_base_tariff_cumulative_sums_no_peak_keys(
         )
 
     peak_keys = [k for k in cumulative_sums if "peak" in k]
-    assert (
-        peak_keys == []
-    ), f"cumulative_sums must not contain peak/off_peak keys for base-tariff, got: {peak_keys}"
+    assert peak_keys == [], (
+        f"cumulative_sums must not contain peak/off_peak keys for base-tariff, got: {peak_keys}"
+    )

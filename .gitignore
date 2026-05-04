@@ -34,3 +34,5 @@ ENV/
 dist/
 build/
 *.egg-info/
+
+.claude/settings.json

@@ -9,9 +9,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 from homeassistant import config_entries, data_entry_flow
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hellowatt.const import DOMAIN
 
@@ -22,18 +22,16 @@ from custom_components.hellowatt.const import DOMAIN
 
 async def _create_mock_config_entry(
     hass: HomeAssistant, mock_config_entry: dict
-) -> ConfigEntry:
+) -> MockConfigEntry:
     """Helper to create and add a mock config entry to Home Assistant."""
-    entry = ConfigEntry(
-        version=1,
-        minor_version=1,
+    entry = MockConfigEntry(
         domain=DOMAIN,
         title=f"HelloWatt ({mock_config_entry['username']})",
         data=mock_config_entry,
         source=config_entries.SOURCE_USER,
         unique_id=mock_config_entry["unique_id"],
     )
-    await hass.config_entries.async_add(entry)
+    entry.add_to_hass(hass)
     await hass.async_block_till_done()
     return entry
 

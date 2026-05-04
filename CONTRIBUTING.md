@@ -284,12 +284,18 @@ hellowatt_hass/
 │   └── workflows/          # CI/CD workflows
 ├── custom_components/
 │   └── hellowatt/          # Integration code
-│       ├── __init__.py     # Setup & services
-│       ├── client.py       # API client
-│       ├── coordinator.py  # Data coordinator
-│       ├── sensor.py       # Sensor platform
-│       ├── config_flow.py  # Configuration UI
-│       └── const.py        # Constants
+│       ├── __init__.py         # Setup & service registration
+│       ├── client.py           # API client
+│       ├── config_flow.py      # Configuration UI and options flow
+│       ├── const.py            # Constants
+│       ├── coordinator.py      # Data coordinator
+│       ├── diagnostics.py      # HA diagnostics support
+│       ├── importer.py         # Historical data import & statistics
+│       ├── manifest.json       # Integration metadata
+│       ├── sensor.py           # Sensor platform
+│       ├── services.yaml       # Service definitions
+│       ├── strings.json        # UI strings
+│       └── system_health.py    # System health reporting
 ├── tests/                  # Test files
 ├── pyproject.toml          # Tool configurations
 ├── requirements-dev.txt    # Dev dependencies

@@ -5,7 +5,7 @@ from __future__ import annotations
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
@@ -71,20 +71,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register the services once
     if not hass.services.has_service(DOMAIN, SERVICE_IMPORT_HISTORICAL):
+
+        async def handle_import(call: ServiceCall) -> None:
+            try:
+                await async_import_historical_data(hass, call)
+            except Exception as err:
+                LOGGER.exception("Unhandled error in import_historical_data: %s", err)
+                raise
+
         hass.services.async_register(
             DOMAIN,
             SERVICE_IMPORT_HISTORICAL,
-            lambda call: hass.async_create_task(
-                async_import_historical_data(hass, call)
-            ),
+            handle_import,
             schema=SERVICE_IMPORT_SCHEMA,
         )
 
     if not hass.services.has_service(DOMAIN, SERVICE_CLEAR_STATISTICS):
+
+        async def handle_clear(call: ServiceCall) -> None:
+            try:
+                await async_clear_statistics(hass, call)
+            except Exception as err:
+                LOGGER.exception("Unhandled error in clear_statistics: %s", err)
+                raise
+
         hass.services.async_register(
             DOMAIN,
             SERVICE_CLEAR_STATISTICS,
-            lambda call: hass.async_create_task(async_clear_statistics(hass, call)),
+            handle_clear,
             schema=SERVICE_CLEAR_SCHEMA,
         )
 

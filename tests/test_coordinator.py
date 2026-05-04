@@ -9,43 +9,23 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import AsyncMock, Mock
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
-
-from custom_components.hellowatt.const import DOMAIN
-from custom_components.hellowatt.coordinator import HelloWattCoordinator
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 # ============================================================================
 # Coordinator Tests
 # ============================================================================
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_initialization(
-    hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator initializes correctly."""
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client_authenticated,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated, mock_hellowatt_homes[0]
     )
 
     assert coordinator.name == "hellowatt_12345678901234"
@@ -54,30 +34,15 @@ async def test_coordinator_initialization(
     assert coordinator.update_interval == timedelta(hours=1)
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_update_success(
-    hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test successful data update."""
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client_authenticated,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated, mock_hellowatt_homes[0]
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -89,31 +54,16 @@ async def test_coordinator_update_success(
     assert "contract_provider" in coordinator.data
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_processes_electricity_data(
-    hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
     mock_api_response_electricity,
+    make_coordinator,
 ) -> None:
     """Test coordinator correctly processes electricity data."""
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client_authenticated,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated, mock_hellowatt_homes[0]
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -137,31 +87,16 @@ async def test_coordinator_processes_electricity_data(
     assert data["electricity_cost"] == expected_cost
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_processes_gas_data(
-    hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
     mock_api_response_gas,
+    make_coordinator,
 ) -> None:
     """Test coordinator correctly processes gas data."""
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client_authenticated,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated, mock_hellowatt_homes[0]
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -181,32 +116,17 @@ async def test_coordinator_processes_gas_data(
     assert data["gas_cost"] == expected_cost
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_calculates_weekly_totals(
-    hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
     mock_api_response_electricity,
     mock_api_response_gas,
+    make_coordinator,
 ) -> None:
     """Test coordinator calculates weekly consumption totals."""
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client_authenticated,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated, mock_hellowatt_homes[0]
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -227,13 +147,14 @@ async def test_coordinator_calculates_weekly_totals(
     assert data["gas_weekly"] == expected_weekly_gas
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_handles_missing_gas(
-    hass: HomeAssistant,
     mock_hellowatt_client,
     mock_hellowatt_homes,
     mock_api_response_electricity,
     mock_api_response_temperature,
     mock_api_response_contracts,
+    make_coordinator,
 ) -> None:
     """Test coordinator gracefully handles missing gas data."""
 
@@ -252,25 +173,7 @@ async def test_coordinator_handles_missing_gas(
         return_value=mock_api_response_contracts
     )
 
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
-    )
+    coordinator = make_coordinator(mock_hellowatt_client, mock_hellowatt_homes[0])
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -283,10 +186,11 @@ async def test_coordinator_handles_missing_gas(
     assert "gas" not in data
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_update_failure(
-    hass: HomeAssistant,
     mock_hellowatt_client,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator raises UpdateFailed on error."""
 
@@ -296,87 +200,43 @@ async def test_coordinator_update_failure(
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_fail
 
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
-    )
+    coordinator = make_coordinator(mock_hellowatt_client, mock_hellowatt_homes[0])
 
     await coordinator.async_refresh()
     assert coordinator.last_update_success is False
     assert isinstance(coordinator.last_exception, UpdateFailed)
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_uses_custom_update_interval(
-    hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator respects custom update interval from options."""
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={"update_interval": 6},  # Custom 6 hours
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client_authenticated,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated,
+        mock_hellowatt_homes[0],
+        options={"update_interval": 6},
     )
 
     assert coordinator.update_interval == timedelta(hours=6)
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_uses_custom_lookback_days(
-    hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator uses custom lookback days from options."""
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={"lookback_days": 14},  # Custom 14 days
-    )
-
     consumption_mock = AsyncMock(return_value={"values": []})
     mock_hellowatt_client_authenticated.get_daily_consumption = consumption_mock
 
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client_authenticated,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated,
+        mock_hellowatt_homes[0],
+        options={"lookback_days": 14},
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -385,30 +245,15 @@ async def test_coordinator_uses_custom_lookback_days(
     assert consumption_mock.called
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_extracts_home_info(
-    hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator includes home information in data."""
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client_authenticated,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated, mock_hellowatt_homes[0]
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -421,14 +266,15 @@ async def test_coordinator_extracts_home_info(
     assert data["pdl"] == "12345678901234"
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_handles_base_rate_contract(
-    hass: HomeAssistant,
     mock_hellowatt_client,
     mock_hellowatt_homes,
     mock_api_response_electricity_base,
     mock_api_response_gas,
     mock_api_response_temperature,
     mock_api_response_contracts,
+    make_coordinator,
 ) -> None:
     """Test coordinator handles base rate (no HP/HC) contracts."""
     mock_hellowatt_client.get_daily_consumption = AsyncMock(
@@ -444,25 +290,7 @@ async def test_coordinator_handles_base_rate_contract(
         return_value=mock_api_response_contracts
     )
 
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
-    )
+    coordinator = make_coordinator(mock_hellowatt_client, mock_hellowatt_homes[0])
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -481,10 +309,11 @@ async def test_coordinator_handles_base_rate_contract(
 # ============================================================================
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_raises_config_entry_auth_failed_on_401(
-    hass: HomeAssistant,
     mock_hellowatt_client,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator raises ConfigEntryAuthFailed on 401 error."""
     import aiohttp
@@ -500,34 +329,17 @@ async def test_coordinator_raises_config_entry_auth_failed_on_401(
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_401
 
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
-    )
+    coordinator = make_coordinator(mock_hellowatt_client, mock_hellowatt_homes[0])
 
     with pytest.raises(ConfigEntryAuthFailed):
         await coordinator.async_config_entry_first_refresh()
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_raises_config_entry_auth_failed_on_403(
-    hass: HomeAssistant,
     mock_hellowatt_client,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator raises ConfigEntryAuthFailed on 403 error."""
     import aiohttp
@@ -543,34 +355,17 @@ async def test_coordinator_raises_config_entry_auth_failed_on_403(
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_403
 
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
-    )
+    coordinator = make_coordinator(mock_hellowatt_client, mock_hellowatt_homes[0])
 
     with pytest.raises(ConfigEntryAuthFailed):
         await coordinator.async_config_entry_first_refresh()
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_raises_config_entry_auth_failed_on_auth_error(
-    hass: HomeAssistant,
     mock_hellowatt_client,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator raises ConfigEntryAuthFailed on authentication error."""
     from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -581,34 +376,17 @@ async def test_coordinator_raises_config_entry_auth_failed_on_auth_error(
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_auth_fail
 
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
-    )
+    coordinator = make_coordinator(mock_hellowatt_client, mock_hellowatt_homes[0])
 
     with pytest.raises(ConfigEntryAuthFailed):
         await coordinator.async_config_entry_first_refresh()
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_raises_config_entry_auth_failed_on_no_session(
-    hass: HomeAssistant,
     mock_hellowatt_client,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator raises ConfigEntryAuthFailed on no session cookie error."""
     from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -619,34 +397,17 @@ async def test_coordinator_raises_config_entry_auth_failed_on_no_session(
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_no_session
 
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
-    )
+    coordinator = make_coordinator(mock_hellowatt_client, mock_hellowatt_homes[0])
 
     with pytest.raises(ConfigEntryAuthFailed):
         await coordinator.async_config_entry_first_refresh()
 
 
+@pytest.mark.usefixtures("hass")
 async def test_coordinator_raises_update_failed_on_network_error(
-    hass: HomeAssistant,
     mock_hellowatt_client,
     mock_hellowatt_homes,
+    make_coordinator,
 ) -> None:
     """Test coordinator raises UpdateFailed on non-auth network errors."""
     import aiohttp
@@ -661,25 +422,7 @@ async def test_coordinator_raises_update_failed_on_network_error(
 
     mock_hellowatt_client.get_daily_consumption = mock_get_consumption_network_error
 
-    entry = ConfigEntry(
-        minor_version=1,
-        version=1,
-        domain=DOMAIN,
-        title="Test",
-        data={"username": "test@example.com", "password": "test"},
-        source="user",
-        unique_id="test@example.com",
-        options={},
-    )
-
-    coordinator = HelloWattCoordinator(
-        hass=hass,
-        client=mock_hellowatt_client,
-        entry=entry,
-        pdl="12345678901234",
-        home_id="home123",
-        home=mock_hellowatt_homes[0],
-    )
+    coordinator = make_coordinator(mock_hellowatt_client, mock_hellowatt_homes[0])
 
     await coordinator.async_refresh()
     assert coordinator.last_update_success is False
