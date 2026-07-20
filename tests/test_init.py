@@ -8,21 +8,21 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers import integration_platform # Import for async_unload_platforms
-from homeassistant.helpers.aiohttp_client import async_create_clientsession # Import the function being patched
-import pytest
 
 from custom_components.hellowatt import (
+    PLATFORMS,
     async_reload_entry,
     async_setup_entry,
     async_unload_entry,
 )
-from custom_components.hellowatt import PLATFORMS
-from custom_components.hellowatt.client import HelloWattApiClient # Import for Mock(spec=...)
+from custom_components.hellowatt.client import (
+    HelloWattApiClient,
+)  # Import for Mock(spec=...)
 from custom_components.hellowatt.const import DOMAIN
 
 # ============================================================================
@@ -55,16 +55,22 @@ async def test_async_setup_entry_success(
     mock_client._session = mock_aiohttp_session
     mock_client.authenticate = AsyncMock()
     mock_client.get_homes = AsyncMock(return_value=mock_hellowatt_homes)
-    mock_client.get_daily_consumption = AsyncMock(return_value={}) # Default mock
-    mock_client.get_daily_gas_consumption = AsyncMock(return_value={}) # Default mock
-    mock_client.get_yearly_temperature = AsyncMock(return_value={}) # Default mock
-    mock_client.get_contracts = AsyncMock(return_value=[]) # Default mock
-
+    mock_client.get_daily_consumption = AsyncMock(return_value={})  # Default mock
+    mock_client.get_daily_gas_consumption = AsyncMock(return_value={})  # Default mock
+    mock_client.get_yearly_temperature = AsyncMock(return_value={})  # Default mock
+    mock_client.get_contracts = AsyncMock(return_value=[])  # Default mock
 
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
-        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups") as mock_forward_setups,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
+        patch(
+            "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"
+        ) as mock_forward_setups,
     ):
         mock_client_class.return_value = mock_client
         mock_forward_setups.return_value = None
@@ -116,11 +122,17 @@ async def test_async_setup_entry_creates_coordinators(
     mock_client.get_yearly_temperature = AsyncMock(return_value={})
     mock_client.get_contracts = AsyncMock(return_value=[])
 
-
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
-        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups") as mock_forward_setups,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
+        patch(
+            "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"
+        ) as mock_forward_setups,
         patch(
             "custom_components.hellowatt.coordinator.HelloWattCoordinator"
         ) as mock_coordinator_class,
@@ -161,10 +173,14 @@ async def test_async_setup_entry_auth_failure(
     mock_client._session = mock_aiohttp_session
     mock_client.authenticate = AsyncMock(side_effect=Exception("Authentication failed"))
 
-
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
     ):
         mock_client_class.return_value = mock_client
 
@@ -200,12 +216,18 @@ async def test_async_setup_entry_no_session_cookie(
 
     mock_client = Mock(spec=HelloWattApiClient)
     mock_client._session = mock_aiohttp_session
-    mock_client.authenticate = AsyncMock(side_effect=Exception("No session cookie received"))
-
+    mock_client.authenticate = AsyncMock(
+        side_effect=Exception("No session cookie received")
+    )
 
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
     ):
         mock_client_class.return_value = mock_client
 
@@ -250,11 +272,17 @@ async def test_async_setup_entry_registers_services(
     mock_client.get_yearly_temperature = AsyncMock(return_value={})
     mock_client.get_contracts = AsyncMock(return_value=[])
 
-
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
-        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups") as mock_forward_setups,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
+        patch(
+            "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"
+        ) as mock_forward_setups,
         patch(
             "custom_components.hellowatt.coordinator.HelloWattCoordinator"
         ) as mock_coordinator_class,
@@ -314,11 +342,17 @@ async def test_async_unload_entry_success(
     mock_client.get_yearly_temperature = AsyncMock(return_value={})
     mock_client.get_contracts = AsyncMock(return_value=[])
 
-
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
-        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups") as mock_forward_setups,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
+        patch(
+            "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"
+        ) as mock_forward_setups,
         patch(
             "custom_components.hellowatt.coordinator.HelloWattCoordinator"
         ) as mock_coordinator_class,
@@ -332,7 +366,10 @@ async def test_async_unload_entry_success(
 
         await async_setup_entry(hass, entry)
 
-    with patch("homeassistant.helpers.integration_platform.async_unload_platforms", return_value=True) as mock_unload_platforms:
+    with patch(
+        "homeassistant.helpers.integration_platform.async_unload_platforms",
+        return_value=True,
+    ) as mock_unload_platforms:
         result = await async_unload_entry(hass, entry)
 
         assert result is True
@@ -371,9 +408,16 @@ async def test_async_unload_entry_removes_services_when_last_entry(
     mock_client.get_contracts = AsyncMock(return_value=[])
 
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
-        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups") as mock_forward_setups,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
+        patch(
+            "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"
+        ) as mock_forward_setups,
         patch(
             "custom_components.hellowatt.coordinator.HelloWattCoordinator"
         ) as mock_coordinator_class,
@@ -389,7 +433,10 @@ async def test_async_unload_entry_removes_services_when_last_entry(
 
     assert hass.services.has_service(DOMAIN, "import_historical_data")
 
-    with patch("homeassistant.helpers.integration_platform.async_unload_platforms", return_value=True) as mock_unload_platforms:
+    with patch(
+        "homeassistant.helpers.integration_platform.async_unload_platforms",
+        return_value=True,
+    ) as mock_unload_platforms:
         await async_unload_entry(hass, entry)
 
     assert not hass.services.has_service(DOMAIN, "import_historical_data")
@@ -450,16 +497,25 @@ async def test_async_unload_entry_keeps_services_when_other_entries_exist(
     mock_client_entry2.get_yearly_temperature = AsyncMock(return_value={})
     mock_client_entry2.get_contracts = AsyncMock(return_value=[])
 
-
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
-        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups") as mock_forward_setups,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
+        patch(
+            "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"
+        ) as mock_forward_setups,
         patch(
             "custom_components.hellowatt.coordinator.HelloWattCoordinator"
         ) as mock_coordinator_class,
     ):
-        mock_client_class.side_effect = [mock_client_entry1, mock_client_entry2] # For multiple setups
+        mock_client_class.side_effect = [
+            mock_client_entry1,
+            mock_client_entry2,
+        ]  # For multiple setups
         mock_forward_setups.return_value = None
 
         mock_coordinator = Mock()
@@ -469,7 +525,10 @@ async def test_async_unload_entry_keeps_services_when_other_entries_exist(
         await async_setup_entry(hass, entry1)
         await async_setup_entry(hass, entry2)
 
-    with patch("homeassistant.helpers.integration_platform.async_unload_platforms", return_value=True) as mock_unload_platforms:
+    with patch(
+        "homeassistant.helpers.integration_platform.async_unload_platforms",
+        return_value=True,
+    ) as mock_unload_platforms:
         await async_unload_entry(hass, entry1)
 
     assert hass.services.has_service(DOMAIN, "import_historical_data")
@@ -515,8 +574,13 @@ async def test_async_reload_entry(
     mock_client.get_contracts = AsyncMock(return_value=[])
 
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
         patch.object(hass.config_entries, "async_reload") as mock_reload,
     ):
         mock_client_class.return_value = mock_client
@@ -534,7 +598,6 @@ async def test_async_reload_entry(
 async def test_async_setup_entry_handles_homes_without_pdl(
     hass: HomeAssistant,
     mock_aiohttp_session,
-    mock_hellowatt_homes,
 ) -> None:
     """Test setup skips homes without PDL."""
     entry = ConfigEntry(
@@ -563,13 +626,19 @@ async def test_async_setup_entry_handles_homes_without_pdl(
     mock_client = Mock(spec=HelloWattApiClient)
     mock_client._session = mock_aiohttp_session
     mock_client.authenticate = AsyncMock()
-    mock_client.get_homes = AsyncMock(return_value=homes_without_pdl) # Mock get_homes
-
+    mock_client.get_homes = AsyncMock(return_value=homes_without_pdl)  # Mock get_homes
 
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
-        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups") as mock_forward_setups,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
+        patch(
+            "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"
+        ) as mock_forward_setups,
         patch(
             "custom_components.hellowatt.coordinator.HelloWattCoordinator"
         ) as mock_coordinator_class,
@@ -580,7 +649,6 @@ async def test_async_setup_entry_handles_homes_without_pdl(
         mock_coordinator = Mock()
         mock_coordinator.async_config_entry_first_refresh = AsyncMock()
         mock_coordinator_class.return_value = mock_coordinator
-
 
         await async_setup_entry(hass, entry)
 
@@ -617,13 +685,21 @@ async def test_async_setup_entry_handles_empty_homes(
     mock_client = Mock(spec=HelloWattApiClient)
     mock_client._session = mock_aiohttp_session
     mock_client.authenticate = AsyncMock()
-    mock_client.get_homes = AsyncMock(return_value=[]) # Mock get_homes to return empty list
-
+    mock_client.get_homes = AsyncMock(
+        return_value=[]
+    )  # Mock get_homes to return empty list
 
     with (
-        patch("homeassistant.helpers.aiohttp_client.async_create_clientsession", return_value=mock_aiohttp_session),
-        patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class,
-        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups") as mock_forward_setups,
+        patch(
+            "homeassistant.helpers.aiohttp_client.async_create_clientsession",
+            return_value=mock_aiohttp_session,
+        ),
+        patch(
+            "custom_components.hellowatt.client.HelloWattApiClient"
+        ) as mock_client_class,
+        patch(
+            "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups"
+        ) as mock_forward_setups,
     ):
         mock_client_class.return_value = mock_client
         mock_forward_setups.return_value = None

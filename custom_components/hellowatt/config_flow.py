@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 import aiohttp
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
-import voluptuous as vol
 
 from .client import HelloWattApiClient
 from .const import DEFAULT_LOOKBACK_DAYS, DEFAULT_UPDATE_INTERVAL_HOURS, DOMAIN
