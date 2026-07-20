@@ -10,7 +10,7 @@ import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch, PropertyMock
 
 import aiohttp
 import pytest
@@ -67,8 +67,23 @@ def mock_options() -> dict[str, Any]:
 
 
 @pytest.fixture
-def mock_aiohttp_session():
-    """Mock aiohttp ClientSession."""
+def mock_aiohttp_response_obj():
+    """Fixture for a mock aiohttp response object."""
+    response = AsyncMock(spec=aiohttp.ClientResponse)
+    response.status = 200
+    response.raise_for_status = Mock()
+    response.json = AsyncMock(return_value={})
+    response.text = AsyncMock(return_value="")
+    response.__aenter__ = AsyncMock(return_value=response) # Make it an async context manager
+    response.__aexit__ = AsyncMock(return_value=None)
+    return response
+
+
+@pytest.fixture
+def mock_aiohttp_session(mock_aiohttp_response_obj):
+    """Mock aiohttp ClientSession to prevent real network calls.
+    The .get() method will return an AsyncMock context manager.
+    """
     session = Mock(spec=aiohttp.ClientSession)
     session.cookie_jar = Mock()
 
@@ -83,11 +98,21 @@ def mock_aiohttp_session():
 
     session.cookie_jar.__iter__ = Mock(return_value=iter([csrf_cookie, session_cookie]))
 
+    # Mock the .get() method to return an AsyncMock that can be awaited as a context manager
+    mock_get = AsyncMock()
+    mock_get.__aenter__.return_value = mock_aiohttp_response_obj
+    session.get.return_value = mock_get
+
+    # Also mock the .request method, as it might be used internally
+    mock_request = AsyncMock()
+    mock_request.__aenter__.return_value = mock_aiohttp_response_obj
+    session.request.return_value = mock_request
+    
     return session
 
 
 @pytest.fixture
-def mock_aiohttp_session_no_csrf():
+def mock_aiohttp_session_no_csrf(mock_aiohttp_response_obj):
     """Mock aiohttp ClientSession without CSRF token."""
     session = Mock(spec=aiohttp.ClientSession)
     session.cookie_jar = Mock()
@@ -98,6 +123,16 @@ def mock_aiohttp_session_no_csrf():
     session_cookie.value = "test_session_id"
 
     session.cookie_jar.__iter__ = Mock(return_value=iter([session_cookie]))
+
+    # Mock the .get() method to return an AsyncMock that can be awaited as a context manager
+    mock_get = AsyncMock()
+    mock_get.__aenter__.return_value = mock_aiohttp_response_obj
+    session.get.return_value = mock_get
+
+    # Also mock the .request method, as it might be used internally
+    mock_request = AsyncMock()
+    mock_request.__aenter__.return_value = mock_aiohttp_response_obj
+    session.request.return_value = mock_request
 
     return session
 
@@ -212,21 +247,27 @@ def mock_hellowatt_client(
     mock_aiohttp_session,
     mock_hellowatt_homes,
 ):
-    """Mock HelloWatt API client with authenticated state."""
+    """Mock HelloWatt API client with authenticated state.
+    Configures mock client to return predefined homes and mocks authenticate.
+    """
     from custom_components.hellowatt.client import HelloWattApiClient
 
-    client = HelloWattApiClient(
-        session=mock_aiohttp_session,
+    client = HelloWattApiClient( # Use the real client class
+        session=mock_aiohttp_session, # Inject the mocked session
         username="test@example.com",
         password="test_password",
     )
+    # Configure the client's internal state as needed for tests
     client._homes = mock_hellowatt_homes
+    client.authenticate = AsyncMock() # Still mock authenticate to control its behavior
+    # No need to mock get_homes or properties explicitly unless client logic changes how it uses _homes
+    
     return client
 
 
 @pytest.fixture
 def mock_hellowatt_client_authenticated(
-    mock_hellowatt_client,
+    mock_hellowatt_client, # Now this is a real client with a mocked session
     mock_api_response_electricity,
     mock_api_response_gas,
     mock_api_response_temperature,
@@ -234,36 +275,14 @@ def mock_hellowatt_client_authenticated(
 ):
     """Mock fully authenticated client with all API methods mocked."""
 
-    async def mock_authenticate():
-        """Mock authenticate method."""
-
-    async def mock_get_daily_consumption(*_args, **_kwargs):
-        """Mock electricity consumption."""
-        return mock_api_response_electricity
-
-    async def mock_get_daily_gas_consumption(*_args, **_kwargs):
-        """Mock gas consumption."""
-        return mock_api_response_gas
-
-    async def mock_get_yearly_temperature(*_args, **_kwargs):
-        """Mock temperature."""
-        return mock_api_response_temperature
-
-    async def mock_get_contracts(*_args, **_kwargs):
-        """Mock contracts."""
-        return mock_api_response_contracts
-
-    async def mock_get_homes(*_args, **_kwargs):
-        """Mock homes list."""
-        return mock_hellowatt_client._homes
-
-    mock_hellowatt_client.authenticate = mock_authenticate
-    mock_hellowatt_client.get_daily_consumption = mock_get_daily_consumption
-    mock_hellowatt_client.get_daily_gas_consumption = mock_get_daily_gas_consumption
-    mock_hellowatt_client.get_yearly_temperature = mock_get_yearly_temperature
-    mock_hellowatt_client.get_contracts = mock_get_contracts
-    mock_hellowatt_client.get_homes = mock_get_homes
-
+    # Configure the mocked methods on the real client instance
+    mock_hellowatt_client.authenticate = AsyncMock() # Ensure it's mocked
+    mock_hellowatt_client.get_daily_consumption = AsyncMock(return_value=mock_api_response_electricity)
+    mock_hellowatt_client.get_daily_gas_consumption = AsyncMock(return_value=mock_api_response_gas)
+    mock_hellowatt_client.get_yearly_temperature = AsyncMock(return_value=mock_api_response_temperature)
+    mock_hellowatt_client.get_contracts = AsyncMock(return_value=mock_api_response_contracts)
+    mock_hellowatt_client.get_homes = AsyncMock(return_value=mock_hellowatt_client._homes) # Make get_homes return the _homes set above
+    
     return mock_hellowatt_client
 
 
@@ -280,7 +299,6 @@ def mock_coordinator_data() -> dict[str, Any]:
         "electricity_peak": 10.5,
         "electricity_off_peak": 5.2,
         "electricity_yesterday": 14.8,
-        "electricity_weekly": 110.5,
         "electricity_co2": 1.2,
         "electricity_cost": 3.0,
         "electricity_cost_consumption": 2.5,
@@ -354,7 +372,7 @@ async def setup_integration(
     from homeassistant.setup import async_setup_component
 
     # Mock the client creation
-    with patch("custom_components.hellowatt.HelloWattApiClient") as mock_client_class:
+    with patch("custom_components.hellowatt.client.HelloWattApiClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client.homes = [
             {
