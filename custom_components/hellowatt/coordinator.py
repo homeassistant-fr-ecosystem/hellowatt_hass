@@ -221,17 +221,21 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     contracts[0],
                 )
                 if active_contract:
-                    result["contract_provider"] = active_contract.get(
-                        "provider", {}
+                    # The API may return these keys with an explicit null rather
+                    # than omitting them, and dict.get(key, {}) only falls back
+                    # when the key is absent. Use `or {}` so a null value is
+                    # handled too.
+                    result["contract_provider"] = (
+                        active_contract.get("provider") or {}
                     ).get("name")
-                    result["contract_offer"] = active_contract.get("offer", {}).get(
+                    result["contract_offer"] = (active_contract.get("offer") or {}).get(
                         "name"
                     )
 
             # Process home info
             result["address"] = self.home.get("address")
-            result["postal_code"] = self.home.get("area", {}).get("postalCode")
-            result["city"] = self.home.get("area", {}).get("name")
+            result["postal_code"] = (self.home.get("area") or {}).get("postalCode")
+            result["city"] = (self.home.get("area") or {}).get("name")
             result["pdl"] = self.pdl
 
             return result
