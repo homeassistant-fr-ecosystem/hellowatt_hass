@@ -64,10 +64,7 @@ Every hour (configurable in [coordinator.py:25](custom_components/hellowatt/coor
 **Session Management**:
 ```python
 # Cookie jar with unsafe=True required for cross-domain cookies
-session = async_create_clientsession(
-    hass,
-    cookie_jar=aiohttp.CookieJar(unsafe=True)
-)
+session = async_create_clientsession(hass, cookie_jar=aiohttp.CookieJar(unsafe=True))
 ```
 
 **Error Handling**:
@@ -88,29 +85,29 @@ session = async_create_clientsession(
 **Data Structure Returned**:
 ```python
 {
-    "electricity": float,              # kWh total
-    "electricity_peak": float,         # kWh (HP contracts only)
-    "electricity_off_peak": float,     # kWh (HC contracts only)
-    "electricity_yesterday": float,    # kWh
-    "electricity_weekly": float,       # kWh
-    "electricity_co2": float,          # kg
-    "electricity_cost": float,         # EUR
+    "electricity": float,  # kWh total
+    "electricity_peak": float,  # kWh (HP contracts only)
+    "electricity_off_peak": float,  # kWh (HC contracts only)
+    "electricity_yesterday": float,  # kWh
+    "electricity_weekly": float,  # kWh
+    "electricity_co2": float,  # kg
+    "electricity_cost": float,  # EUR
     "electricity_cost_consumption": float,  # EUR
-    "electricity_cost_subscription": float, # EUR
-    "gas": float,                      # kWh
-    "gas_yesterday": float,            # kWh
-    "gas_weekly": float,               # kWh
-    "gas_co2": float,                  # kg
-    "gas_cost": float,                 # EUR
-    "gas_cost_consumption": float,     # EUR
-    "gas_cost_subscription": float,    # EUR
-    "temperature": float,              # °C
-    "contract_provider": str,          # active contract provider name (e.g. "EDF")
-    "contract_offer": str,             # active contract offer name (e.g. "Tarif Bleu")
-    "address": str,                    # home street address
-    "postal_code": str,                # home postal code
-    "city": str,                       # home city name
-    "pdl": str,                        # PDL identifier (mirrors the coordinator key)
+    "electricity_cost_subscription": float,  # EUR
+    "gas": float,  # kWh
+    "gas_yesterday": float,  # kWh
+    "gas_weekly": float,  # kWh
+    "gas_co2": float,  # kg
+    "gas_cost": float,  # EUR
+    "gas_cost_consumption": float,  # EUR
+    "gas_cost_subscription": float,  # EUR
+    "temperature": float,  # °C
+    "contract_provider": str,  # active contract provider name (e.g. "EDF")
+    "contract_offer": str,  # active contract offer name (e.g. "Tarif Bleu")
+    "address": str,  # home street address
+    "postal_code": str,  # home postal code
+    "city": str,  # home city name
+    "pdl": str,  # PDL identifier (mirrors the coordinator key)
 }
 ```
 
@@ -315,17 +312,17 @@ GET /homes/{home_id}/contracts
 ```python
 # API format
 {
-  "datetime": "2024-01-01T00:00:00Z",
-  "kwhDetailed": {"HP": 15.5, "HC": 8.2},
-  "valueCo2": 2.5,
-  "eurosDetailed": {"HP": 2.33, "HC": 0.98, "subscription": 0.42}
+    "datetime": "2024-01-01T00:00:00Z",
+    "kwhDetailed": {"HP": 15.5, "HC": 8.2},
+    "valueCo2": 2.5,
+    "eurosDetailed": {"HP": 2.33, "HC": 0.98, "subscription": 0.42},
 }
 
 # Statistics format
 {
-  "start": datetime(2024, 1, 1),
-  "state": 23.7,  # sum of kwhDetailed values
-  "sum": 23.7
+    "start": datetime(2024, 1, 1),
+    "state": 23.7,  # sum of kwhDetailed values
+    "sum": 23.7,
 }
 ```
 

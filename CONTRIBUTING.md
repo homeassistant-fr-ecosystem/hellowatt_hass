@@ -123,6 +123,7 @@ All code should include comprehensive type hints:
 ```python
 from typing import Any
 
+
 def process_data(data: dict[str, Any], count: int) -> list[str]:
     """Process data and return results.
 
@@ -175,13 +176,12 @@ Example:
 import pytest
 from unittest.mock import AsyncMock
 
+
 @pytest.mark.asyncio
 class TestHelloWattClient:
     """Tests for HelloWatt API client."""
 
-    async def test_get_consumption_returns_data_when_api_responds(
-        self, mock_client
-    ):
+    async def test_get_consumption_returns_data_when_api_responds(self, mock_client):
         """Test that get_consumption returns data when API responds successfully."""
         # Arrange
         mock_client._request_with_retry = AsyncMock(
