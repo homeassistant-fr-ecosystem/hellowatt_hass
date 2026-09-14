@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import aiohttp
 import pytest
 from homeassistant.config_entries import ConfigEntryState, current_entry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Config, HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -25,6 +25,19 @@ from custom_components.hellowatt.coordinator import HelloWattCoordinator
 
 # Import pytest plugins from Home Assistant
 pytest_plugins = "pytest_homeassistant_custom_component"
+
+# Patch the timezone BEFORE any tests run by monkeypatching the Config class
+
+_original_set_time_zone = Config.set_time_zone
+
+
+def _patched_set_time_zone(self, tz: str) -> None:
+    if tz == "US/Pacific":
+        tz = "America/Los_Angeles"
+    return _original_set_time_zone(self, tz)
+
+
+Config.set_time_zone = _patched_set_time_zone
 
 
 @pytest.fixture(autouse=True)
