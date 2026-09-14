@@ -3,14 +3,15 @@ name: Manual Release
 on:
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: 'Release tag name (e.g., v1.2.3)'
+      version:
+        description: 'Release version (e.g., 1.2.3)'
         required: true
         type: string
-      release_title:
-        description: 'Release title (optional)'
+      prerelease:
+        description: 'Mark as pre-release'
         required: false
-        type: string
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -22,44 +23,47 @@ jobs:
 
     steps:
       - name: 'Checkout source code'
-        uses: 'actions/checkout@v3'
+        uses: 'actions/checkout@v4'
         with:
           fetch-depth: 0
 
-      - name: 'Determine release type'
-        id: release-type
-        run: |
-          if [[ "${{ github.ref_name }}" == "release" ]]; then
-            echo "prerelease=false" >> $GITHUB_OUTPUT
-            echo "release_type=Release" >> $GITHUB_OUTPUT
-          else
-            echo "prerelease=true" >> $GITHUB_OUTPUT
-            echo "release_type=Pre-release" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: 'Set up Python'
+        uses: actions/setup-python@v5
         with:
-          node-version: '24'
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-      - name: Build
-        run: yarn build
+          python-version: '3.11'
 
-      - name: Generate release notes
-        id: create-release-notes
+      - name: 'Update version in manifest.json'
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Update manifest.json
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" custom_components/hellowatt/manifest.json
+          cat custom_components/hellowatt/manifest.json
+
+      - name: 'Create release zip'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_NAME="hellowatt-${VERSION}.zip"
+          # Create zip with custom_components/hellowatt contents at root of zip
+          cd custom_components
+          zip -r "../${ZIP_NAME}" hellowatt
+          echo "zip_name=${ZIP_NAME}" >> $GITHUB_OUTPUT
+
+      - name: 'Generate release notes'
+        id: release-notes
         uses: johnyherangi/create-release-notes@main
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Create Release
+      - name: 'Create Release'
         uses: ncipollo/release-action@v1
         with:
           makeLatest: true
-          artifacts: 'dist/**'
+          artifacts: ${{ steps.version.outputs.zip_name }}
           generateReleaseNotes: true
-          tag: ${{ inputs.tag_name }}
-          name: ${{ inputs.release_title || format('{0} - {1} from {2}', inputs.tag_name, steps.release-type.outputs.release_type, github.ref_name) }}
-          body: ${{ steps.create-release-notes.outputs.release-notes }}
-          prerelease: ${{ steps.release-type.outputs.prerelease }}
+          tag: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: ${{ steps.release-notes.outputs.release-notes }}
+          prerelease: ${{ inputs.prerelease }}
           draft: false
