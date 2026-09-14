@@ -427,3 +427,38 @@ async def test_coordinator_raises_update_failed_on_network_error(
     await coordinator.async_refresh()
     assert coordinator.last_update_success is False
     assert isinstance(coordinator.last_exception, UpdateFailed)
+
+
+@pytest.mark.usefixtures("hass")
+async def test_coordinator_handles_null_contract_and_area_fields(
+    mock_hellowatt_client_authenticated,
+    mock_hellowatt_homes,
+    make_coordinator,
+) -> None:
+    """Test coordinator survives explicit nulls in contract and area fields.
+
+    Some accounts get ``"provider": null`` (and likewise ``offer`` or the
+    home ``area``) from the API rather than a missing key. ``dict.get(key, {})``
+    only falls back to its default when the key is *absent*, so a present-but-null
+    value used to propagate and raise ``AttributeError`` on the chained ``.get()``,
+    which surfaced as ``UpdateFailed`` and blocked the whole integration setup
+    over two purely informational sensors.
+    """
+    mock_hellowatt_client_authenticated.get_contracts = AsyncMock(
+        return_value=[{"contractState": "actual", "provider": None, "offer": None}]
+    )
+    home_without_area = {**mock_hellowatt_homes[0], "area": None}
+
+    coordinator = make_coordinator(
+        mock_hellowatt_client_authenticated, home_without_area
+    )
+
+    await coordinator.async_config_entry_first_refresh()
+
+    assert coordinator.data is not None
+    assert coordinator.data["contract_provider"] is None
+    assert coordinator.data["contract_offer"] is None
+    assert coordinator.data["postal_code"] is None
+    assert coordinator.data["city"] is None
+    # The rest of the payload must still be populated.
+    assert "electricity" in coordinator.data
