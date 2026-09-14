@@ -306,11 +306,13 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
 
     @property
     def last_reset(self):
-        """Return midnight of today for TOTAL sensors so HA doesn't compute negative deltas across daily resets."""
-        if self._attr_state_class in (
-            SensorStateClass.TOTAL,
-            SensorStateClass.TOTAL_INCREASING,
-        ):
+        """Return midnight of today for TOTAL sensors so HA doesn't compute negative deltas across daily resets.
+
+        Only ``TOTAL`` qualifies: Home Assistant rejects any entity that sets
+        ``last_reset`` with a different state class, and ``TOTAL_INCREASING``
+        already detects its own resets.
+        """
+        if self._attr_state_class == SensorStateClass.TOTAL:
             from homeassistant.util import dt as dt_util
 
             now = dt_util.now()

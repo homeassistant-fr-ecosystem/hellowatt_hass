@@ -420,12 +420,18 @@ async def test_contract_diagnostic_sensors(
     assert offer_sensor.native_value == "Test Offer"
 
 
-async def test_sensor_last_reset_for_total_increasing(
+async def test_sensor_no_last_reset_for_total_increasing(
     hass: HomeAssistant,
     mock_hellowatt_client_authenticated,
     mock_hellowatt_homes,
 ) -> None:
-    """Test last_reset property for TOTAL_INCREASING sensors (e.g. CO2 emissions)."""
+    """Test last_reset is None for TOTAL_INCREASING sensors (e.g. CO2 emissions).
+
+    Home Assistant only accepts ``last_reset`` on ``state_class: total``. Setting it
+    on a ``TOTAL_INCREASING`` sensor makes the sensor platform reject the entity with
+    ``ValueError: ... has set last_reset. Setting last_reset for entities with
+    state_class other than 'total' is not supported``, so the entity is never added.
+    """
     entry = ConfigEntry(
         minor_version=1,
         version=1,
@@ -453,14 +459,17 @@ async def test_sensor_last_reset_for_total_increasing(
         coordinator, "12345678901234", "electricity_co2", sensor_config
     )
 
-    # TOTAL_INCREASING sensors should have last_reset at midnight
-    last_reset = sensor.last_reset
-    assert last_reset is not None
+    # TOTAL_INCREASING sensors must not expose last_reset
+    assert sensor.last_reset is None
 
-    # Should be midnight of today
+    # A TOTAL sensor, by contrast, still gets midnight of today
+    total_sensor = HelloWattSensor(
+        coordinator, "12345678901234", "electricity", SENSOR_TYPES["electricity"]
+    )
+    assert total_sensor.state_class == SensorStateClass.TOTAL
     now = dt_util.now()
     expected = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    assert last_reset == expected
+    assert total_sensor.last_reset == expected
 
 
 async def test_sensor_last_reset_none_for_measurement(
