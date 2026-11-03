@@ -35,3 +35,8 @@ clear_statistics:
       example: "12345678901234"
       selector:
         text:
+
+reset_import_state:
+  name: Reset import state
+  description: Reset the last imported date to force a full re-import of all historical data on next import.
+  fields: {}

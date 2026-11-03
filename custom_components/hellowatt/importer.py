@@ -13,7 +13,9 @@ import voluptuous as vol
 from dateutil.relativedelta import relativedelta
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
 try:
     from homeassistant.components.recorder.models import StatisticMeanType
@@ -95,6 +97,7 @@ async def _import_statistics(
             cumulative_sums[key] = 0.0
 
     # Detect HP/HC tariff from the first value's kwhDetailed keys
+    # Use early-exit: check only until we find HP or HC
     has_hphc = energy_type == "electricity" and any(
         "HP" in day.get("kwhDetailed", {}) or "HC" in day.get("kwhDetailed", {})
         for day in values
@@ -199,9 +202,9 @@ async def _import_statistics(
             else:
                 subscription_cost_clamped = subscription_cost
             if subscription_cost_clamped > 0:
-                cumulative_sums[f"{energy_type}_cost_subscription"] += (
-                    subscription_cost_clamped
-                )
+                cumulative_sums[
+                    f"{energy_type}_cost_subscription"
+                ] += subscription_cost_clamped
                 statistics[f"{energy_type}_cost_subscription"].append(
                     StatisticData(
                         start=dt,
@@ -225,9 +228,9 @@ async def _import_statistics(
             else:
                 consumption_cost_clamped = consumption_cost
             if consumption_cost_clamped > 0:
-                cumulative_sums[f"{energy_type}_cost_consumption"] += (
-                    consumption_cost_clamped
-                )
+                cumulative_sums[
+                    f"{energy_type}_cost_consumption"
+                ] += consumption_cost_clamped
                 statistics[f"{energy_type}_cost_consumption"].append(
                     StatisticData(
                         start=dt,
@@ -523,9 +526,38 @@ async def async_import_historical_data(hass: HomeAssistant, call: ServiceCall) -
                 current_start = start_date
                 total_months = 0
 
+                # Load last imported date from coordinator options
+                # Default to epoch (1970-01-01) for first import
+                last_imported = coordinator.options.get(
+                    "last_imported", dt_util.datetime(1970, 1, 1)
+                )
+
+                # Skip months that have already been imported
+                if current_start <= last_imported:
+                    LOGGER.info(
+                        "Skipping import: data already imported up to %s for PDL %s",
+                        last_imported,
+                        pdl,
+                    )
+                    # Move current_start past the last imported date
+                    current_start = (
+                        datetime(last_imported.year, last_imported.month, 1)
+                        + relativedelta(months=1)
+                    ).date()
+                    total_months = 0  # Reset counter
+                else:
+                    LOGGER.info(
+                        "Importing new data from %s for PDL %s (last imported: %s)",
+                        start_date,
+                        pdl,
+                        last_imported,
+                    )
+
                 # Initialize cumulative sums from existing statistics so a
                 # partial re-import does not reset the running totals.
-                pdl_cumulative_sums = await _load_existing_sums(hass, pdl, start_date)
+                pdl_cumulative_sums = await _load_existing_sums(
+                    hass, pdl, current_start
+                )
 
                 while current_start <= end_date:
                     # Calculate end of current month
@@ -640,6 +672,13 @@ async def async_import_historical_data(hass: HomeAssistant, call: ServiceCall) -
                         datetime(current_start.year, current_start.month, 1)
                         + relativedelta(months=1)
                     ).date()
+
+                # Update last_imported in coordinator options to the end date
+                # So the next import starts from where we left off
+                coordinator.options = {
+                    **coordinator.options,
+                    "last_imported": end_date,
+                }
 
                 # Keep INFO for completion
                 LOGGER.info(

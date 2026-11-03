@@ -32,4 +32,3 @@ jobs:
 
       - name: Run Ruff formatter check
         run: ruff format --check .
-

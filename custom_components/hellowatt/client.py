@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any, TypeVar, cast
+from typing import Any, ClassVar, TypeVar, cast
 
 import aiohttp
 
@@ -17,16 +17,20 @@ HEADERS: dict[str, str] = {
     "Referer": "https://www.hellowatt.fr/mon-compte/",
 }
 
-# Retry configuration for handling 429 responses
-MAX_RETRIES = 3
-BACKOFF_BASE = 2
-
 # Type variable for generic return types
 T = TypeVar("T")
+
+# Default retry configuration for handling 429 responses
+DEFAULT_MAX_RETRIES: int = 3
+DEFAULT_BACKOFF_BASE: int = 2
 
 
 class HelloWattApiClient:
     """HelloWatt API Client."""
+
+    # Default retry configuration (can be overridden per instance)
+    default_max_retries: ClassVar[int] = DEFAULT_MAX_RETRIES
+    default_backoff_base: ClassVar[int] = DEFAULT_BACKOFF_BASE
 
     def __init__(
         self, session: aiohttp.ClientSession, username: str, password: str
@@ -43,6 +47,8 @@ class HelloWattApiClient:
         self._password: str = password
         self._homes: list[dict[str, Any]] = []
         self._authenticating: bool = False
+        self._max_retries: int = self.default_max_retries
+        self._backoff_base: int = self.default_backoff_base
 
     @property
     def homes(self) -> list[dict[str, Any]]:
@@ -103,12 +109,12 @@ class HelloWattApiClient:
                         wait = (
                             int(retry_after)
                             if retry_after is not None
-                            else BACKOFF_BASE**attempts
+                            else self._backoff_base**attempts
                         )
                     except Exception:
-                        wait = BACKOFF_BASE**attempts
+                        wait = self._backoff_base**attempts
 
-                    if attempts >= MAX_RETRIES:
+                    if attempts >= self._max_retries:
                         LOGGER.error("Max retries reached for %s, status=429", url)
                         response.raise_for_status()
 
@@ -214,12 +220,12 @@ class HelloWattApiClient:
                             wait = (
                                 int(retry_after)
                                 if retry_after is not None
-                                else BACKOFF_BASE**attempts
+                                else self._backoff_base**attempts
                             )
                         except Exception:
-                            wait = BACKOFF_BASE**attempts
+                            wait = self._backoff_base**attempts
 
-                        if attempts >= MAX_RETRIES:
+                        if attempts >= self._max_retries:
                             LOGGER.error(
                                 "Max retries reached for login GET %s", login_url
                             )
@@ -267,12 +273,12 @@ class HelloWattApiClient:
                             wait = (
                                 int(retry_after)
                                 if retry_after is not None
-                                else BACKOFF_BASE**attempts
+                                else self._backoff_base**attempts
                             )
                         except Exception:
-                            wait = BACKOFF_BASE**attempts
+                            wait = self._backoff_base**attempts
 
-                        if attempts >= MAX_RETRIES:
+                        if attempts >= self._max_retries:
                             LOGGER.error(
                                 "Max retries reached for login POST %s", login_url
                             )
@@ -329,12 +335,12 @@ class HelloWattApiClient:
                             wait = (
                                 int(retry_after)
                                 if retry_after is not None
-                                else BACKOFF_BASE**attempts
+                                else self._backoff_base**attempts
                             )
                         except Exception:
-                            wait = BACKOFF_BASE**attempts
+                            wait = self._backoff_base**attempts
 
-                        if attempts >= MAX_RETRIES:
+                        if attempts >= self._max_retries:
                             LOGGER.error("Max retries reached for homes GET %s", url)
                             response.raise_for_status()
 

@@ -302,7 +302,7 @@ class HelloWattSensor(CoordinatorEntity[HelloWattCoordinator], SensorEntity):
             or (isinstance(value, str) and not value.strip())
         ):
             return None
-        return value if isinstance(value, (float, int, str)) else None
+        return value if isinstance(value, float | int | str) else None
 
     @property
     def last_reset(self):

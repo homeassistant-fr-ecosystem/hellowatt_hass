@@ -533,3 +533,28 @@ status=403, response={"detail": "Authentication credentials were not provided."}
 - Historical data import service
 - CO2 and cost tracking
 - Automatic re-authentication
+
+## Incremental Historical Import
+
+### Overview
+Track the last imported date per PDL and skip already-imported months during subsequent imports. Builds on the existing _load_existing_sums infrastructure.
+
+### Implementation Details
+- **coordinator.py**: Added `self.last_imported` attribute initialized from entry options (defaults to epoch `1970-01-01`)
+- **importer.py**: Modified `async_import_historical_data()` to skip months already imported based on `coordinator.last_imported`, update `last_imported` after successful import
+- **config_flow.py**: Added `last_imported` option to options flow schema (defaults to `1970-01-01` for first-time imports)
+- **services.yaml**: Added `reset_import_state` service with empty schema - resets `last_imported` to epoch for forced full re-import
+- **__init__.py**: Added `async_reset_import_state()` handler that resets `entry.options["last_imported"]` to epoch
+
+### Usage
+- First import: All historical data from `start_date` to `end_date` is imported
+- Subsequent imports: Only months after `last_imported` are imported, avoiding redundant API calls
+- To force full re-import: Use the `hellowatt.reset_import_state` service, then restart Home Assistant
+
+### Configuration
+Users can set the `last_imported` option via the options flow, or reset it using the service:
+```yaml
+# In options flow, set last_imported date
+# Or via service call:
+# service: hellowatt.reset_import_state
+```

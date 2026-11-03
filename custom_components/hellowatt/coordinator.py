@@ -53,6 +53,9 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "update_interval", DEFAULT_UPDATE_INTERVAL_HOURS
         )
 
+        # Get last imported date from options, fallback to epoch for first import
+        last_imported = entry.options.get("last_imported", dt_util.datetime(1970, 1, 1))
+
         super().__init__(
             hass,
             LOGGER,
@@ -64,6 +67,7 @@ class HelloWattCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.pdl: str = pdl
         self.home_id: str = home_id
         self.home: dict[str, Any] = home
+        self.last_imported: dt_util.datetime = last_imported
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from HelloWatt API.
