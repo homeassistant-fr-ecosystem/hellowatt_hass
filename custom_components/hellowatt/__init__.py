@@ -8,7 +8,6 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
-from homeassistant.util import dt as dt_util  # Used in coordinator and config_flow
 
 from .client import HelloWattApiClient
 from .const import DOMAIN, LOGGER
@@ -108,14 +107,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_reset_import_state(hass: HomeAssistant, call: ServiceCall) -> None:
     """Reset the last imported date to force a full re-import of all historical data on next import."""
-    entry_id = call.context.entry_id if call.context else None
+    import datetime
+
+    entry_id = call.context.id if call.context else None
     if entry_id:
         entry = hass.config_entries.async_get_entry(entry_id)
-        if entry and DOMAIN in entry.data:
+        if entry and entry.domain == DOMAIN:
             # Reset last_imported to epoch via options
             entry.options = {
                 **entry.options,
-                "last_imported": dt_util.datetime(1970, 1, 1),
+                "last_imported": datetime.datetime(1970, 1, 1),
             }
             entry.async_update_options(entry.options)
             LOGGER.info(

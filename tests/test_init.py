@@ -6,14 +6,15 @@ https://developers.home-assistant.io/docs/creating_integration_tests_file_struct
 
 from __future__ import annotations
 
+import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from homeassistant.config_entries import ConfigEntry, MockConfigEntry
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hellowatt import (
     PLATFORMS,
@@ -735,12 +736,21 @@ async def test_async_reset_import_state(
         options={"last_imported": "2024-06-01"},
     )
     entry.add_to_hass(hass)
+    entry.async_update_options = Mock()
 
-    # Call the reset service
-    await async_reset_import_state(hass, Mock())
+    # Call the reset service with proper context
+    from homeassistant.helpers.service import Context, ServiceCall
+
+    service_call = ServiceCall(
+        domain="hellowatt",
+        service="reset_import_state",
+        data={},
+        context=Context(id=entry.entry_id),
+    )
+    await async_reset_import_state(hass, service_call)
 
     # Verify last_imported was reset to epoch
-    assert entry.options.get("last_imported") == dt_util.datetime(1970, 1, 1)
+    assert entry.options.get("last_imported") == datetime.datetime(1970, 1, 1)
 
     # Verify the entry was reloaded
     entry.async_update_options.assert_called_once()
